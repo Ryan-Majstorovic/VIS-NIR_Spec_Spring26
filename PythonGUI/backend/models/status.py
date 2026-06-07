@@ -48,6 +48,18 @@ class SessionStatus(BaseModel):
     last_export_path: str | None = None
 
 
+class RecordingStatus(BaseModel):
+    """Purpose: summarize dense binary recording. Rationale: the authoritative capture path needs status separate from rolling display buffers."""
+    active: bool = False
+    failed: bool = False
+    frame_count: int = 0
+    queue_depth: int = 0
+    path: str | None = None
+    last_path: str | None = None
+    last_csv_path: str | None = None
+    error: str | None = None
+
+
 class CommandResult(BaseModel):
     """Purpose: report command success or failure. Rationale: UI actions need a simple result shape to display messages."""
     ok: bool
@@ -58,5 +70,6 @@ class AppSnapshot(BaseModel):
     """Purpose: bundle the current app state for the UI. Rationale: one read is simpler and safer than many small reads."""
     device: DeviceStatus
     session: SessionStatus
+    recording: RecordingStatus = Field(default_factory=RecordingStatus)
     spectrum: SpectrumFrame | None = None
     logs: list[str] = Field(default_factory=list)

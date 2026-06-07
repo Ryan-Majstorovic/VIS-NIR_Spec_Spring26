@@ -6,8 +6,8 @@ from threading import Lock
 from uuid import uuid4
 
 from backend.models.config import CalibrationConfig, UserConfig
-from backend.models.frames import FramePacket, SpectrumFrame
-from backend.models.status import AppSnapshot, ConnectionState, DeviceStatus, SessionStatus
+from backend.models.frames import BinaryFramePacket, FramePacket, SpectrumFrame
+from backend.models.status import AppSnapshot, ConnectionState, DeviceStatus, RecordingStatus, SessionStatus
 
 
 def utc_now() -> datetime:
@@ -34,6 +34,7 @@ class StateManager:
             effective_sample_count=user_config.device.effective_sample_count,
         )
         self._session_status = SessionStatus(session_id=self.new_session_id())
+        self._recording_status = RecordingStatus()
         self._last_spectrum: SpectrumFrame | None = None
         self._logs: deque[str] = deque(maxlen=max_logs)
 
@@ -110,8 +111,13 @@ class StateManager:
             self._device_status.sample_preview = []
             self._last_spectrum = None
 
-    def update_from_frame(self, frame: FramePacket, *, missed_frames: int = 0) -> None:
+    def update_from_frame(self, frame: FramePacket | BinaryFramePacket, *, missed_frames: int = 0) -> None:
         """Purpose: copy new frame metadata into live status. Rationale: the UI should read frame summaries without parsing frames itself."""
+        adc_counts = frame.adc_counts
+        if len(adc_counts) >= 8:
+            preview = list(adc_counts[:4]) + list(adc_counts[-4:])
+        else:
+            preview = list(adc_counts)
         with self._lock:
             self._device_status.last_seen = frame.timestamp
             self._device_status.frame_counter = frame.frame_counter
@@ -120,11 +126,7 @@ class StateManager:
             self._device_status.effective_sample_count = frame.effective_count
             self._device_status.last_frame_flags = frame.flags
             self._device_status.missed_frames += missed_frames
-            self._device_status.sample_preview = (
-                list(frame.adc_counts[:4]) + list(frame.adc_counts[-4:])
-                if len(frame.adc_counts) >= 8
-                else list(frame.adc_counts)
-            )
+            self._device_status.sample_preview = [int(value) for value in preview]
             self._device_status.last_message = f"Frame {frame.frame_counter} received."
 
     def set_last_spectrum(self, frame: SpectrumFrame) -> None:
@@ -142,12 +144,18 @@ class StateManager:
         with self._lock:
             self._session_status = session_status
 
+    def set_recording_status(self, recording_status: RecordingStatus) -> None:
+        """Purpose: store the dense binary recording summary. Rationale: UI status should report full-rate capture health directly."""
+        with self._lock:
+            self._recording_status = recording_status
+
     def snapshot(self, *, include_spectrum: bool = True) -> AppSnapshot:
         """Purpose: return a combined app-state snapshot. Rationale: grouped reads reduce lock churn and simplify UI refreshes."""
         with self._lock:
             return AppSnapshot(
                 device=self._device_status.model_copy(deep=True),
                 session=self._session_status.model_copy(deep=True),
+                recording=self._recording_status.model_copy(deep=True),
                 spectrum=self._last_spectrum.model_copy(deep=True)
                 if include_spectrum and self._last_spectrum is not None
                 else None,

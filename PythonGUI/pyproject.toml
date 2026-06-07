@@ -9,6 +9,7 @@ description = "Python desktop control app for the VIS-NIR spectrometer."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "h5py>=3.11.0",
   "kivy>=2.3.0",
   "numpy>=2.0.0",
   "pydantic>=2.8.0",

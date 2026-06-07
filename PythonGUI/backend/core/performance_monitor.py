@@ -333,12 +333,23 @@ class PerformanceMonitor:
         chunk_size_metric = self._find_value_metric(value_snapshots, "transport.read_chunk_bytes")
         queue_wait_metric = self._find_value_metric(value_snapshots, "backend.bytes_queue_wait_ms")
         queue_depth_metric = self._find_value_metric(value_snapshots, "backend.bytes_queue_depth")
+        binary_queue_depth_metric = self._find_value_metric(value_snapshots, "backend.binary_queue_depth")
+        binary_frames_written_metric = self._find_value_metric(value_snapshots, "backend.binary_frames_written")
+        full_frame_sample_count_metric = self._find_value_metric(value_snapshots, "backend.full_frame_sample_count")
         frame_age_metric = self._find_value_metric(value_snapshots, "ui.latest_frame_age_ms")
         refresh_interval_metric = self._find_value_metric(value_snapshots, "ui.refresh_plot_interval_ms")
         plot_interval_metric = self._find_value_metric(value_snapshots, "ui.plot_update_interval_ms")
+        frontend_plotted_sample_metric = self._find_value_metric(value_snapshots, "ui.frontend_plotted_sample_count")
+        frontend_line_points_metric = self._find_value_metric(value_snapshots, "ui.frontend_line_plotted_points")
+        frontend_spectrogram_cells_metric = self._find_value_metric(value_snapshots, "ui.frontend_spectrogram_plotted_cells")
+        spectrogram_rows_metric = self._find_value_metric(value_snapshots, "ui.spectrogram_visible_rows")
+        spectrogram_columns_metric = self._find_value_metric(value_snapshots, "ui.spectrogram_visible_columns")
         frame_counter_metric = self._find_counter_metric(counter_snapshots, "backend.frames_processed")
+        full_frame_counter_metric = self._find_counter_metric(counter_snapshots, "backend.full_frames_processed")
+        display_frame_counter_metric = self._find_counter_metric(counter_snapshots, "backend.display_frames_processed")
         byte_counter_metric = self._find_counter_metric(counter_snapshots, "transport.bytes_in")
         missed_counter_metric = self._find_counter_metric(counter_snapshots, "backend.frames_missed")
+        display_throttle_counter = self._find_counter_metric(counter_snapshots, "backend.display_frame_throttle_skips")
         refresh_plot_counter = self._find_counter_metric(counter_snapshots, "ui.refresh_plot_calls")
         plot_update_counter = self._find_counter_metric(counter_snapshots, "ui.plot_updates")
         spectrum_update_counter = self._find_counter_metric(counter_snapshots, "ui.live_spectrum_updates")
@@ -348,11 +359,23 @@ class PerformanceMonitor:
         no_frame_counter = self._find_counter_metric(counter_snapshots, "ui.refresh_plot_no_frame")
         session_overwrite_counter = self._find_counter_metric(counter_snapshots, "backend.session_frame_overwrites")
         spectrogram_overwrite_counter = self._find_counter_metric(counter_snapshots, "backend.spectrogram_history_overwrites")
+        full_frame_process_metric = self._find_timing_metric(timing_snapshots, "backend.full_frame_process")
+        binary_dense_metric = self._find_timing_metric(timing_snapshots, "backend.binary_dense_process")
+        binary_queue_append_metric = self._find_timing_metric(timing_snapshots, "backend.binary_queue_append")
+        display_frame_process_metric = self._find_timing_metric(timing_snapshots, "backend.display_frame_process")
+        ui_refresh_plot_metric = self._find_timing_metric(timing_snapshots, "ui.refresh_plot")
+        ui_line_redraw_metric = self._find_timing_metric(timing_snapshots, "ui.live_spectrum_redraw")
+        ui_spectrogram_redraw_metric = self._find_timing_metric(timing_snapshots, "ui.live_spectrogram_redraw")
+        ui_spectrogram_texture_metric = self._find_timing_metric(timing_snapshots, "ui.live_spectrogram_texture_build")
 
         selected_pipeline_metrics = [
             metric
             for metric_name in (
                 "backend.packet_parse",
+                "backend.full_frame_process",
+                "backend.binary_dense_process",
+                "backend.binary_queue_append",
+                "backend.display_frame_process",
                 "backend.frame_process",
                 "backend.build_from_frame",
                 "backend.build_processed_columns",
@@ -388,6 +411,66 @@ class PerformanceMonitor:
                 f"{frame_counter_metric.rate_per_s:5.1f} frames/s | "
                 f"total {frame_counter_metric.total_count:.0f}"
             )
+
+        backend_full_frame_parts: list[str] = []
+        if full_frame_counter_metric is not None:
+            backend_full_frame_parts.append(f"full frames {full_frame_counter_metric.rate_per_s:5.1f}/s")
+        if full_frame_sample_count_metric is not None:
+            backend_full_frame_parts.append(f"samples latest {full_frame_sample_count_metric.latest_value:5.0f}")
+        if full_frame_process_metric is not None:
+            backend_full_frame_parts.append(
+                f"process avg {full_frame_process_metric.avg_ms:5.2f} ms p95 {full_frame_process_metric.p95_ms:5.2f}"
+            )
+        if binary_dense_metric is not None:
+            backend_full_frame_parts.append(
+                f"dense avg {binary_dense_metric.avg_ms:5.2f} ms p95 {binary_dense_metric.p95_ms:5.2f}"
+            )
+        if binary_queue_append_metric is not None:
+            backend_full_frame_parts.append(f"queue append avg {binary_queue_append_metric.avg_ms:5.2f} ms")
+        if binary_queue_depth_metric is not None:
+            backend_full_frame_parts.append(
+                f"binary queue latest {binary_queue_depth_metric.latest_value:4.0f} max {binary_queue_depth_metric.max_value:4.0f}"
+            )
+        if binary_frames_written_metric is not None:
+            backend_full_frame_parts.append(f"written {binary_frames_written_metric.latest_value:7.0f}")
+        if backend_full_frame_parts:
+            lines.append("Backend full-frame processing: " + " | ".join(backend_full_frame_parts))
+
+        frontend_plot_parts: list[str] = []
+        if refresh_plot_counter is not None:
+            frontend_plot_parts.append(f"refresh {refresh_plot_counter.rate_per_s:5.1f}/s")
+        if plot_update_counter is not None:
+            frontend_plot_parts.append(f"plotted {plot_update_counter.rate_per_s:5.1f}/s")
+        if display_frame_counter_metric is not None:
+            frontend_plot_parts.append(f"display frames {display_frame_counter_metric.rate_per_s:5.1f}/s")
+        if display_throttle_counter is not None:
+            frontend_plot_parts.append(f"backend skipped {display_throttle_counter.rate_per_s:5.1f}/s")
+        if frontend_plotted_sample_metric is not None:
+            frontend_plot_parts.append(
+                f"samples latest {frontend_plotted_sample_metric.latest_value:5.0f} avg {frontend_plotted_sample_metric.avg_value:5.0f}"
+            )
+        if frontend_line_points_metric is not None:
+            frontend_plot_parts.append(f"line points {frontend_line_points_metric.latest_value:5.0f}")
+        if frontend_spectrogram_cells_metric is not None:
+            frontend_plot_parts.append(f"spec cells {frontend_spectrogram_cells_metric.latest_value:6.0f}")
+        if spectrogram_rows_metric is not None and spectrogram_columns_metric is not None:
+            frontend_plot_parts.append(
+                f"spec {spectrogram_rows_metric.latest_value:4.0f}x{spectrogram_columns_metric.latest_value:4.0f}"
+            )
+        if display_frame_process_metric is not None:
+            frontend_plot_parts.append(
+                f"display build avg {display_frame_process_metric.avg_ms:5.2f} ms"
+            )
+        if ui_refresh_plot_metric is not None:
+            frontend_plot_parts.append(f"UI refresh avg {ui_refresh_plot_metric.avg_ms:5.2f} ms")
+        if ui_line_redraw_metric is not None:
+            frontend_plot_parts.append(f"line redraw avg {ui_line_redraw_metric.avg_ms:5.2f} ms")
+        if ui_spectrogram_redraw_metric is not None:
+            frontend_plot_parts.append(f"spec redraw avg {ui_spectrogram_redraw_metric.avg_ms:5.2f} ms")
+        if ui_spectrogram_texture_metric is not None:
+            frontend_plot_parts.append(f"spec texture avg {ui_spectrogram_texture_metric.avg_ms:5.2f} ms")
+        if frontend_plot_parts:
+            lines.append("GUI plotted data frontend: " + " | ".join(frontend_plot_parts))
 
         transport_parts: list[str] = []
         if chunk_interval_metric is not None:

@@ -7,7 +7,7 @@ import numpy as np
 
 from backend.core.performance_monitor import PerformanceMonitor
 from backend.models.config import DeviceConfig
-from backend.models.frames import FramePacket, SpectrumFrame
+from backend.models.frames import BinaryFramePacket, FramePacket, SpectrumFrame
 from backend.processing.calibration_manager import CalibrationManager
 from backend.processing.adc_converter import counts_to_volts
 from backend.processing.dark_subtraction import apply_dark_subtraction, estimate_dark_level
@@ -42,7 +42,7 @@ class SpectrumBuilder:
         """Purpose: store updated device settings. Rationale: export calculations should follow the latest ADC and geometry configuration."""
         self._device_config = device_config
 
-    def build_from_frame(self, frame: FramePacket) -> SpectrumFrame:
+    def build_from_frame(self, frame: FramePacket | BinaryFramePacket) -> SpectrumFrame:
         """Purpose: wrap one parsed device frame as a spectrum frame. Rationale: the rest of the app should work with one stable frame type."""
         monitor = self._performance_monitor
         with (
@@ -58,6 +58,11 @@ class SpectrumBuilder:
                 dark_reference,
                 saturation_reference_counts,
             ) = self._build_processed_columns(frame.adc_counts)
+            raw_adc_counts = (
+                frame.adc_counts.tolist()
+                if hasattr(frame.adc_counts, "tolist")
+                else list(frame.adc_counts)
+            )
             spectrogram_values = self._normalize_spectrogram_signal(
                 processed_counts,
                 saturation_reference_counts=saturation_reference_counts,
@@ -76,7 +81,7 @@ class SpectrumBuilder:
                 effective_start_index=frame.effective_start,
                 effective_sample_count=frame.effective_count,
                 frame_flags=frame.flags,
-                adc_counts=frame.adc_counts,
+                adc_counts=[int(value) for value in raw_adc_counts],
                 live_display_counts=display_counts.tolist(),
                 spectrogram_row=spectrogram_row,
                 dark_reference_count=dark_reference,
