@@ -8,6 +8,7 @@ import numpy as np
 
 from backend.models.frames import BannerPacket, BinaryFramePacket, DevicePacket, TextLinePacket
 
+# DOC-UUID: 2BD0CC64-CA9B-4886-BE5C-970D86E21283
 PACKET_MAGIC = b"CCD1"
 PACKET_VERSION = 1
 PACKET_TYPE_FRAME = 1

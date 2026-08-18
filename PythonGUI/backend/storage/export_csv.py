@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from backend.processing.spectrum_builder import SpectrumBuilder
 
 
+# DOC-UUID: 70686C4A-AEE9-44A6-8B28-D74FD756FCD6
 def export_spectra_csv(
     path: Path,
     frames: Sequence[SpectrumFrame],

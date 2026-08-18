@@ -29,6 +29,7 @@ ACCEPTANCE_FLAGS = 0x0001
 
 # Current STM32 CCD1 frame format. The little-endian layout mirrors the packed
 # C header: magic, version, type, reserved, frame_id, geometry, flags, payload.
+# DOC-UUID: C6B4929A-5CFB-46E8-A592-FD75E67ED745
 PACKET_MAGIC = b"CCD1"
 PACKET_VERSION = 1
 PACKET_TYPE_FRAME = 1

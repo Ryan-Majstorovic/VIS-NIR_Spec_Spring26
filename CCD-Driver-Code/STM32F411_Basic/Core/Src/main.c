@@ -31,6 +31,7 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+/* DOC-UUID: 9F6C2C68-53B8-4B6B-BB9F-42068A583BF3 */
 #define CCD_LINE_SAMPLE_COUNT 3694U
 #define CCD_EFFECTIVE_START_INDEX 32U
 #define CCD_EFFECTIVE_SAMPLE_COUNT 3648U

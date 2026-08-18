@@ -1,0 +1,7 @@
+interface:
+  display_name: "VIS-NIR Doc Research"
+  short_description: "Research and populate VIS-NIR docs"
+  default_prompt: "Use $vis-nir-populate-doc-section to research VIS-NIR docs, code, and historical project sources before drafting or updating a section."
+
+policy:
+  allow_implicit_invocation: true

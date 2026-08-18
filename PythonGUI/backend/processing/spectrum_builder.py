@@ -14,6 +14,7 @@ from backend.processing.dark_subtraction import apply_dark_subtraction, estimate
 from backend.processing.intensity_correction import apply_intensity_correction
 from backend.processing.wavelength_map import indices_to_wavelengths
 
+# DOC-UUID: 552FD33D-F11F-41B7-B520-81E940994448
 FRAME_DARK_START_INDEX = 16
 FRAME_DARK_END_INDEX = 28
 LIVE_DISPLAY_CLIP_MIN = 0.0
