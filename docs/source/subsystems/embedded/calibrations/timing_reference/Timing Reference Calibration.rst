@@ -3,6 +3,9 @@ Timing Reference Calibration
 
 Layer 3 secondary-system page for validating the selected CCD timing reference.
 
+This calibration verifies the detector-facing timing requirements and provides
+evidence for later firmware conformance review.
+
 .. toctree::
    :maxdepth: 1
 

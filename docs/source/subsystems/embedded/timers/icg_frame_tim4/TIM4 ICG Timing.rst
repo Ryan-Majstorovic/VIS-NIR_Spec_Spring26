@@ -3,10 +3,15 @@ TIM4 ICG Timing
 
 UUID: ``51D66927-7652-4B5F-A591-22830C5F705F``
 
-TIM4 CH1 provides the ICG frame timing on PB6. The current firmware uses an
-8.000 ms frame period with prescaler 95, period 7999, pulse 7388, low polarity,
-and interrupt priority 0. TIM4 update starts capture and TIM4 compare ends the
-capture gate.
+The ICG timing function shall delimit each detector integration and readout
+frame.  Its nominal target is an 8 ms period with a 7.388 ms pulse.  The
+10 microsecond SH pulse shall align with ICG so that the required ICG off time
+is preserved; the exact edge relationship and off-time tolerance are ``Not In
+Docs``.  Polarity, edge ownership, timer allocation, interrupt behavior, and
+the exact capture start/stop relationship are also ``Not In Docs``.
+
+**Expected outcome:** A frame boundary is repeatable, observable at the CCD
+interface, and used consistently by acquisition and frame identity.
 
 
 

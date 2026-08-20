@@ -45,5 +45,18 @@ curve. Intensity error depends on the CCD response, mirror and grating
 efficiency, filter transmission, analog acquisition chain, integration time,
 and the software correction factors.
 
+.. _uuid-c2aaf1f1-4b20-4d93-92c4-40b86483492c:
+
+Verification Methods And Evidence
+---------------------------------
+
+UUID: :ref:`C2AAF1F1-4B20-4D93-92C4-40B86483492C <uuid-c2aaf1f1-4b20-4d93-92c4-40b86483492c>`
+
+Calibration and characterization results remain planned until their method,
+criterion, measurement conditions, uncertainty context, evidence artifacts,
+and review disposition are recorded. The requirements-linked methods and
+evidence-package rules are defined in
+:doc:`Test and Verification <subsystems/test_and_verification/index>`.
+
 
 

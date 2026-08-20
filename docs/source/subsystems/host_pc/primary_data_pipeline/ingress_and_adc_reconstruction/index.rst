@@ -9,26 +9,27 @@ Overview
 
 UUID: :ref:`7F8AC58C-1708-486C-AF4F-2D690F3CE607 <uuid-7f8ac58c-1708-486c-af4f-2d690f3ce607>`
 
-Ingress And ADC Reconstruction is the lowest-level host-side conversion
-boundary inside the primary data pipeline. It combines raw byte intake, buffer
-reconstruction across arbitrary serial-read chunk boundaries, mixed-stream
-binary and ASCII classification, structural checks on reconstructed frame
-candidates, and extraction of ordered ADC-domain samples for downstream
-pipeline use.
+Ingress And ADC Reconstruction is the lowest-level host-side qualification
+boundary inside the primary data pipeline. It accepts measurement frames from
+the Integration transport boundary, verifies that a frame is complete and
+requirements-conforming, observes frame identity and status information, and
+preserves ordered raw ADC counts for downstream pipeline use.
 
 This stage covers four core responsibilities:
 
-* raw byte queueing from the transport path into the host-side receive flow
-* buffer reconstruction and mixed-stream parsing across incomplete read
-  boundaries
-* structural checks on reconstructed ``CCD1`` frame candidates before they are
-  treated as usable measurement data
-* extraction of ordered ADC samples and associated frame metadata for later
-  correction stages
+* qualify complete measurement frames before they enter host processing
+* observe frame identity and status without redefining their wire encoding
+* preserve raw ADC counts in acquisition order with the associated frame
+  context
+* confirm that accepted measurement content includes all 3648 effective
+  detector pixels for later correction and wavelength-association stages
 
-The low-level host-to-microcontroller command contract is documented under the
-Integration section. This page defines only the host-side receive and
-reconstruction behavior after incoming traffic reaches the Host PC.
+Wire framing, transport chunking, text/binary coexistence, packet or marker
+names, resynchronization, and total transported geometry beyond the 3648
+effective detector pixels are ``Not In Docs`` and belong to the Integration
+contract. This page defines only the Host PC qualification and raw-ADC
+preservation behavior after a complete transport candidate reaches the host
+pipeline boundary.
 
 .. note::
 

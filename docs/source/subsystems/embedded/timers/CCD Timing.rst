@@ -3,30 +3,29 @@ CCD Timing
 
 UUID: ``0B79E0A3-6CEE-4957-A820-C4B119B6FF9E``
 
-The firmware uses hardware timers for repeatable CCD timing:
+The embedded controller shall generate repeatable CCD timing signals.  The
+nominal values below are requirements-level targets and are not timer-register
+settings.
 
 .. list-table::
    :header-rows: 1
 
-   * - Signal / Role
-     - Timer
-     - Current Setting
+   * - Signal / role
+     - Nominal requirement
    * - fM master clock
-     - TIM1 CH1
-     - 2 MHz, period 47, pulse 24, about 50 percent duty.
-   * - ADC trigger clock
-     - TIM2 TRGO / CH1
-     - 500 kHz, period 191, pulse 96.
-   * - SH timing
-     - TIM3 CH1
-     - Period 959, pulse 576.
+     - 2 MHz +/- 0.1% acceptance target.
    * - ICG frame timing
-     - TIM4 CH1 plus interrupts
-     - 8.000 ms period, period 7999, pulse 7388, low polarity.
+     - 8 ms period target with a 7.388 ms pulse target.
+   * - SH shift gate
+     - 10 microsecond pulse target.
+   * - ADC conversion trigger
+     - Required to support the detector readout cadence; exact frequency and phase are ``Not In Docs``.
 
-TIM4 update starts capture at the ICG edge. TIM4 compare marks the ICG end edge
-and disables TIM2. Oscilloscope validation should confirm these timing values at
-the driver-board and CCD interface pins, not only at firmware configuration.
+The timing relationship between configurable integration time and SH/ICG is
+also ``Not In Docs``.  The application boundary at which a requested setting
+takes effect is likewise ``Not In Docs`` and remains an open shared contract.
+Validation shall measure the signals at
+the driver-board or CCD interface, not only at a configuration boundary.
 
 
 

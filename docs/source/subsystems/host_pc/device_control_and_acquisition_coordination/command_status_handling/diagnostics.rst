@@ -1,26 +1,15 @@
 Diagnostics
 ===========
 
-
 .. _uuid-7fe903ae-8e87-4d2e-a83e-e32a5c88ab86:
 
-Diagnostics Table
------------------
+Diagnostics
+-----------
 
 UUID: :ref:`7FE903AE-8E87-4D2E-A83E-E32A5C88AB86 <uuid-7fe903ae-8e87-4d2e-a83e-e32a5c88ab86>`
 
-.. list-table::
-   :header-rows: 1
+* **Condition:** failure retains context
+* **Condition:** rejection distinct from transport failure
+* **Condition:** missing outcome not success
 
-   * - Item
-     - Meaning
-     - Expected Range Or State
-     - Failure Indication
-     - User Alert Behavior
-     - UUID
-   * - [TODO] Diagnostic item
-     - [TODO] Meaning
-     - [TODO] Expected range or state
-     - [TODO] Failure indication
-     - [TODO] User alert behavior
-     - [TODO] UUID
+**Operator response:** Gate affected actions or data products until resolved or explicitly accepted by a future requirement.

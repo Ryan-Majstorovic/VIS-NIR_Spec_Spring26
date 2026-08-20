@@ -54,3 +54,9 @@ course-deliverable material is intentionally outside this documentation set.
    subsystems/integration/data_flow/Data Flow
    subsystems/integration/interfaces/Interfaces
    subsystems/integration/test_strategy/Test Strategy
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Test and Verification
+
+   subsystems/test_and_verification/index
