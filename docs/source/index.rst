@@ -20,6 +20,7 @@ course-deliverable material is intentionally outside this documentation set.
    :maxdepth: 1
    :caption: Optics
 
+   Optics System Overview <subsystems/optics/overview>
    subsystems/optics/optical_path/Optical Path
    subsystems/optics/tradeoffs/Tradeoffs
    subsystems/optics/filtering/Filtering
@@ -30,6 +31,7 @@ course-deliverable material is intentionally outside this documentation set.
    :maxdepth: 1
    :caption: Embedded
 
+   Embedded System Overview <subsystems/embedded/overview>
    subsystems/embedded/controller/Controller
    subsystems/embedded/calibrations/Calibrations
    subsystems/embedded/timers/Timers

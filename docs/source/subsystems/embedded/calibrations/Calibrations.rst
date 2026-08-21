@@ -1,9 +1,6 @@
 Calibrations
 ============
 
-Layer 2 functionality table of contents for embedded-side calibration references
-and procedures.
-
 Embedded calibration is limited to timing-reference and frame-geometry checks
 that establish whether the controller and detector interface meet their
 acquisition responsibilities.  Bias, dark, wavelength, flat-field, and
