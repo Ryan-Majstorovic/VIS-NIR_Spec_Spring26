@@ -6,3 +6,17 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
+# Local agent workflows and skills; do not commit.
+.agents/
+.scratch/
+.codex/
+
+# Temporary work directories at any level of the repository.
+.tmp/
+.temp/
+tmp/
+temp/
+.tmp-*/
+.temp-*/
+tmp-*/
+temp-*/

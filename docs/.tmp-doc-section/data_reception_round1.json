@@ -1,7 +1,0 @@
-{
-  "destination_confirmed": true,
-  "scope": "lower level byte and packet stage",
-  "ascii_path": true,
-  "bias_to_current_implementation": true,
-  "com_inspector_as_testing_evidence": true
-}

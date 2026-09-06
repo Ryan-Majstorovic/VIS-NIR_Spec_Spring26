@@ -1,7 +1,0 @@
-interface:
-  display_name: "VIS-NIR Doc Scaffold"
-  short_description: "Scaffold VIS-NIR doc sections"
-  default_prompt: "Use $vis-nir-add-doc-section to scaffold a new VIS-NIR documentation subsection under docs/source, then use $vis-nir-populate-doc-section to research and populate it."
-
-policy:
-  allow_implicit_invocation: true
