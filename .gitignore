@@ -1,4 +1,5 @@
 docs/build/
+docs/pages/
 docs/.doctrees/
 docs/source/_build/
 __pycache__/
