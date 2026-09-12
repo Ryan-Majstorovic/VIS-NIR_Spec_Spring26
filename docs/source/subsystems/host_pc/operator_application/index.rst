@@ -25,50 +25,27 @@ System Objectives
 
 UUID: :ref:`1A395633-071F-4CE1-944C-2B9128D28BA0 <uuid-1a395633-071f-4ce1-944c-2b9128d28ba0>`
 
-**Objective 1:** The Host PC operator-application system shall coordinate
+**Objective 1:** **Session workflow.** The Operator Application shall coordinate
 connection, acquisition, inspection, stop, retention, and disconnect actions
-with visible session state and current action availability.
+using the current connection and session state.
 
-   Rationale: State and availability gating prevent unavailable or
-   out-of-sequence actions from appearing valid.
+**Rationale:** State-directed actions prevent the operator workflow from
+starting or ending measurement activity in the wrong device state.
 
-**Objective 2:** The Host PC operator-application system shall present qualified
-wavelength-associated spectra, rolling history when enabled, and connection,
-device, and session status.
+**Objective 2:** **Presentation and configuration.** The Operator Application
+shall present wavelength-associated spectra and status, manage calibration and
+user-setting selections, and identify missing, stale, invalid, or unavailable
+information.
 
-   Rationale: Presenting the measurement with its operating context preserves
-   the information needed for correct interpretation.
+**Rationale:** Presenting data state with the spectrum prevents unavailable or
+outdated measurements and settings from appearing current.
 
-**Objective 3:** The Host PC operator-application system shall validate
-calibration selections and user-setting changes before activation, report save
-or recall outcomes, and preserve the prior active configuration after failure.
+**Objective 3:** **Retention and export.** The Operator Application shall retain
+session records, verify the five required data products, create CSV output,
+report the export outcome, and preserve the session after an export failure.
 
-   Rationale: Validation and prior-state preservation prevent missing,
-   incompatible, or failed configuration changes from silently governing
-   processing.
-
-**Objective 4:** The Host PC operator-application system shall accept export
-only for an eligible retained session, verify the five required aligned
-products, create CSV output, and report a successful, failed, or incomplete
-outcome.
-
-   Rationale: Eligibility, alignment, and explicit outcome reporting preserve
-   product correspondence and prevent an unsuccessful or partial export from
-   appearing successful.
-
-**Objective 5:** The Host PC operator-application system shall preserve the
-association among session state, processed output, active configuration, and
-retained exportable data.
-
-   Rationale: Consistent association prevents data or settings from becoming
-   detached from the acquisition they govern.
-
-**Objective 6:** The Host PC operator-application system shall expose
-unavailable, stale, invalid, incomplete, or failed conditions without
-presenting them as successful operation.
-
-   Rationale: Visible failure state prevents operator reliance on invalid
-   workflow results.
+**Rationale:** Retaining the source session protects review and recovery when
+output creation is incomplete or unsuccessful.
 
 .. _uuid-6036bb15-b648-4643-a82f-44bc18209cd1:
 

@@ -25,45 +25,26 @@ System Objectives
 
 UUID: :ref:`8A67F948-8087-42D0-A37D-1AA34DB6D15B <uuid-8a67f948-8087-42d0-a37d-1aa34db6d15b>`
 
-**Objective 1:** The Host PC ingress-and-ADC-reconstruction system shall accept
-measurement traffic only while the acquisition interface is available and
-accumulate enough content to evaluate a complete frame.
+**Objective 1:** **Traffic collection.** Ingress and ADC Reconstruction shall
+collect measurement traffic only while the acquisition interface is available
+and shall keep non-measurement traffic out of the processing pipeline.
 
-   Rationale: Acquisition eligibility prevents unavailable-interface traffic
-   from entering frame qualification.
+**Rationale:** Separating measurement and non-measurement traffic prevents
+status text or unsupported content from becoming detector data.
 
-**Objective 2:** The Host PC ingress-and-ADC-reconstruction system shall confirm
-frame completeness, frame identity, status, and 3648-effective-pixel geometry
-before accepting measurement content.
+**Objective 2:** **Frame validation.** Ingress and ADC Reconstruction shall
+verify frame identity, status, completeness, and the presence of all 3648
+effective samples before releasing a frame.
 
-   Rationale: Completeness and geometry qualification prevent incomplete or
-   incompatible measurement content from advancing.
+**Rationale:** These checks prevent partial or structurally incorrect frames
+from being interpreted as complete measurements.
 
-**Objective 3:** The Host PC ingress-and-ADC-reconstruction system shall
-preserve raw ADC counts in acquisition order with their frame context.
+**Objective 3:** **Output and rejection.** Ingress and ADC Reconstruction shall
+preserve accepted raw samples in acquisition order and shall report incomplete
+frames, malformed content, unsupported content, and frame-identity gaps.
 
-   Rationale: Preserving acquisition order maintains the detector-position
-   relationship required by downstream correction and wavelength mapping.
-
-**Objective 4:** The Host PC ingress-and-ADC-reconstruction system shall reject
-or hold incomplete or unsupported content without inventing measurement
-samples.
-
-   Rationale: Preventing sample invention preserves measurement integrity when
-   received content cannot support a complete frame.
-
-**Objective 5:** The Host PC ingress-and-ADC-reconstruction system shall prevent
-non-measurement traffic from becoming a usable spectrum frame.
-
-   Rationale: Traffic classification prevents command or text content from
-   being misrepresented as detector data.
-
-**Objective 6:** The Host PC ingress-and-ADC-reconstruction system shall expose
-malformed or incomplete conditions and identity gaps without redefining
-Integration-owned encodings.
-
-   Rationale: Diagnostic visibility supports qualification and recovery review
-   without creating a conflicting wire contract.
+**Rationale:** Explicit rejection evidence supports recovery without inventing
+samples or redefining the Integration-owned wire format.
 
 .. _uuid-703cb7d9-edc2-4560-8a11-4c321fc92d56:
 

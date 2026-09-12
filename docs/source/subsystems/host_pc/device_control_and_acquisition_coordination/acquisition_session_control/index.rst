@@ -24,47 +24,27 @@ System Objectives
 
 UUID: :ref:`529D7E4E-7178-42D1-A64A-624397FAC33F <uuid-529d7e4e-7178-42d1-a64a-624397fac33f>`
 
-**Objective 1:** The Host PC acquisition-session-control system shall accept a
-Start request only while the connection state is Ready.
+**Objective 1:** **Session start.** Acquisition Session Control shall accept
+Start only while the connection is Ready and shall enter Acquiring only after
+the device returns an accepted start outcome.
 
-   Rationale: Start gating prevents an acquisition from beginning without a
-   usable device connection.
+**Rationale:** Requiring readiness and an accepted response prevents a failed
+start request from creating a false active session.
 
-**Objective 2:** The Host PC acquisition-session-control system shall enter
-Acquiring only after the acquisition-start outcome is accepted.
+**Objective 2:** **Frame and stop handling.** Acquisition Session Control shall
+route complete frames while Acquiring and shall prevent frames received after
+the stop boundary from entering the completed session.
 
-   Rationale: Waiting for acceptance prevents a pending or failed request from
-   being represented as an active acquisition.
+**Rationale:** A defined active interval preserves which frames belong to the
+session and prevents post-stop data from changing its result.
 
-**Objective 3:** The Host PC acquisition-session-control system shall route
-complete measurement frames to processing and retention while the acquisition
-session remains active.
+**Objective 3:** **Session result.** Acquisition Session Control shall report
+the session as complete, partial, or interrupted and shall report transport
+rate, display-update rate, and the system design target as separate
+measurements.
 
-   Rationale: Routing only within the active session preserves the association
-   between received frames and the session that requested them.
-
-**Objective 4:** The Host PC acquisition-session-control system shall accept a
-Stop request and prevent new frames from entering the session after the
-approved stop boundary.
-
-   Rationale: Closing frame admission at the stop boundary prevents later
-   frames from being attributed to a completed session.
-
-**Objective 5:** The Host PC acquisition-session-control system shall expose
-whether a stopped session is complete, partial, or interrupted.
-
-   Rationale: Session disposition prevents incomplete measurements from being
-   treated as complete data products.
-
-**Objective 6:** The Host PC acquisition-session-control system shall keep
-acquisition transport rate, display update rate, and the above-100-fps system
-design target as distinct measures.
-
-   Rationale: Separating these measures prevents evidence for one boundary from
-   being used as acceptance evidence for another.
-
-Pause, buffering, backpressure, dropped-frame, and stop/drain behavior remain
-``Not In Docs``.
+**Rationale:** Explicit disposition and rate labels prevent incomplete sessions
+or unlike performance measures from being conflated.
 
 .. _uuid-48b24259-048c-421d-b6f9-5a4d1ca7ebca:
 

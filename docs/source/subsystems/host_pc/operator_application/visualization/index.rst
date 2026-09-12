@@ -25,42 +25,26 @@ System Objectives
 
 UUID: :ref:`BF942B95-91A2-43A7-BBBC-02D3A26EF151 <uuid-bf942b95-91a2-43a7-bbbc-02d3a26ef151>`
 
-**Objective 1:** The Host PC visualization system shall accept only qualified
-wavelength-and-intensity records for spectrum presentation.
+**Objective 1:** **Spectrum display.** Visualization shall plot processed
+intensity against wavelength and shall preserve the index correspondence
+between the two arrays.
 
-   Rationale: Input qualification prevents invalid measurement data from being
-   presented as a usable spectrum.
+**Rationale:** Index correspondence prevents an intensity value from being
+displayed at the wrong wavelength.
 
-**Objective 2:** The Host PC visualization system shall present the current
-intensity-versus-wavelength spectrum while preserving wavelength and intensity
-correspondence.
+**Objective 2:** **History and status.** Visualization shall append each
+received spectrum to rolling history when enabled and shall present connection,
+device, and session indicators separately from the plot.
 
-   Rationale: Preserved pairing prevents a displayed value from being assigned
-   to the wrong wavelength.
+**Rationale:** Separate status indicators allow the operator to evaluate
+measurement context without altering the spectrum presentation.
 
-**Objective 3:** The Host PC visualization system shall append accepted records
-to rolling spectrogram history when that presentation is enabled.
+**Objective 3:** **Presentation faults.** Visualization shall identify missing,
+stale, unavailable, and non-finite records and shall display processed values
+without performing another measurement correction.
 
-   Rationale: Ordered accepted records provide temporal context without adding
-   unqualified data to the history.
-
-**Objective 4:** The Host PC visualization system shall present connection,
-device, and session indicators independently of spectrum rendering.
-
-   Rationale: Independent status presentation preserves visibility of the
-   operating state when no usable spectrum is available.
-
-**Objective 5:** The Host PC visualization system shall identify no-record,
-stale, unavailable, or invalid-value conditions.
-
-   Rationale: Condition visibility prevents unavailable or stale data from
-   appearing current.
-
-**Objective 6:** The Host PC visualization system shall consume processed
-values without introducing a new measurement calculation.
-
-   Rationale: Calculation ownership remains with the Primary Data Pipeline so
-   presentation does not change the measurement value.
+**Rationale:** Explicit fault presentation prevents invalid data from appearing
+current and preserves processing ownership in the Primary Data Pipeline.
 
 .. _uuid-995c0e2c-fb17-4deb-9e91-b8825654f057:
 

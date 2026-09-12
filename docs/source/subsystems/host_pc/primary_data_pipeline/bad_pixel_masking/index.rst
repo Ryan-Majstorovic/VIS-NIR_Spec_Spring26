@@ -24,43 +24,26 @@ System Objectives
 
 UUID: :ref:`7210EF46-9E87-4FF5-A0B0-67E6BDEA3920 <uuid-7210ef46-9e87-4ff5-a0b0-67e6bdea3920>`
 
-**Objective 1:** The Host PC bad-pixel-masking system shall receive corrected
-counts with the applicable mask and detector-geometry identity.
+**Objective 1:** **Mask verification.** Bad-Pixel Masking shall compare the
+mask's detector identity and detector positions with the active frame geometry
+before using the mask.
 
-   Rationale: Associating the mask with corrected data and geometry establishes
-   the context required to qualify detector positions.
+**Rationale:** Comparing detector identity and positions prevents a mask from
+altering pixels in a different detector layout.
 
-**Objective 2:** The Host PC bad-pixel-masking system shall confirm mask
-compatibility with the active detector geometry before applying the mask.
+**Objective 2:** **Pixel disposition.** Bad-Pixel Masking shall mark or exclude
+each detector position identified by the mask and shall not interpolate or
+replace values until that behavior is defined.
 
-   Rationale: Geometry compatibility prevents mask entries from being assigned
-   to the wrong detector positions.
+**Rationale:** A defined disposition exposes unreliable samples without
+inventing replacement values.
 
-**Objective 3:** The Host PC bad-pixel-masking system shall mark or exclude
-known-bad positions before wavelength or spectral use.
+**Objective 3:** **Output and diagnostics.** Bad-Pixel Masking shall retain the
+mask identity and affected positions and shall report missing masks, geometry
+mismatches, invalid positions, and undefined replacement behavior.
 
-   Rationale: Early qualification prevents unreliable detector positions from
-   silently becoming valid downstream values.
-
-**Objective 4:** The Host PC bad-pixel-masking system shall carry mask identity
-and affected detector positions with the processed record.
-
-   Rationale: Mask provenance supports interpretation and reproduction of the
-   qualified result.
-
-**Objective 5:** The Host PC bad-pixel-masking system shall surface missing,
-mismatched, or invalid-propagation conditions rather than silently applying the
-mask.
-
-   Rationale: Failure visibility prevents an unavailable or incompatible mask
-   from appearing to have qualified the measurement.
-
-**Objective 6:** The Host PC bad-pixel-masking system shall prevent unresolved
-invalid-value, interpolation, replacement, or edge behavior from being applied
-as an accepted masking result.
-
-   Rationale: Blocking undefined treatment prevents invented replacement values
-   from entering downstream processing.
+**Rationale:** Retained mask evidence explains which samples were affected and
+why a record was prevented from advancing.
 
 .. _uuid-32527a47-60c8-41ae-b446-9e3e5118ae17:
 

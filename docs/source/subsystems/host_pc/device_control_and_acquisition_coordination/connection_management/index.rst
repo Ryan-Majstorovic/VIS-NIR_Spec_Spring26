@@ -24,41 +24,26 @@ System Objectives
 
 UUID: :ref:`317C53B9-CA4E-4DD3-BAEF-9AFCEC4D5CA2 <uuid-317c53b9-ca4e-4dd3-baef-9afcec4d5ca2>`
 
-**Objective 1:** The Host PC connection-management system shall maintain the
-Disconnected, Connecting, Ready, and Unavailable connection states.
+**Objective 1:** **Connection request.** Connection Management shall enter
+Connecting after an operator connection request and shall test device
+availability and interface readiness.
 
-   Rationale: Distinct states prevent a connection attempt or failed connection
-   from being represented as ready.
+**Rationale:** A separate connection attempt state prevents an untested
+interface from being represented as ready.
 
-**Objective 2:** The Host PC connection-management system shall enter
-Connecting from Disconnected only in response to an operator connection request
-and shall evaluate device availability and interface readiness.
+**Objective 2:** **Ready state.** Connection Management shall enter Ready only
+after the interface can carry device-control requests and shall block those
+requests in every other state.
 
-   Rationale: Requiring an explicit request and readiness evaluation prevents
-   unintended attachment and premature control access.
+**Rationale:** Restricting device control to Ready prevents actions from being
+sent before the communication path is usable.
 
-**Objective 3:** The Host PC connection-management system shall enter Ready
-only after the connection is confirmed usable for host control.
+**Objective 3:** **Connection loss.** Connection Management shall leave Ready
+after operator disconnect or observed connection loss, block dependent actions,
+and expose the resulting Unavailable or Disconnected state.
 
-   Rationale: Confirmed readiness protects acquisition and command workflows
-   from using an incomplete connection.
-
-**Objective 4:** The Host PC connection-management system shall gate
-acquisition and command actions while the connection is Disconnected,
-Connecting, or Unavailable.
-
-   Rationale: Gating dependent actions prevents requests from being applied
-   when no usable device connection exists.
-
-**Objective 5:** The Host PC connection-management system shall transition out
-of Ready, gate dependent actions, and expose the unavailable condition after an
-operator disconnect or observed connection loss.
-
-   Rationale: Immediate loss handling prevents stale readiness from allowing
-   further control actions.
-
-Discovery, port selection, automatic reconnect, timeout, and retry policy
-remain ``Not In Docs``.
+**Rationale:** Immediate readiness removal prevents stale connection state from
+authorizing later device actions.
 
 .. _uuid-17dd02f7-f14c-49fc-a508-a8356a3e0ebc:
 

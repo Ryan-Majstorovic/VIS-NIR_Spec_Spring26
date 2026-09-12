@@ -25,51 +25,27 @@ System Objectives
 
 UUID: :ref:`CA0B9906-C320-4D0D-A856-BF8F3ADFB7FD <uuid-ca0b9906-c320-4d0d-a856-bf8f3adfb7fd>`
 
-**Objective 1:** The Host PC primary-data-pipeline system shall accept only
-eligible complete measurement content, confirm frame identity, status, and
-3648-effective-pixel geometry, and preserve ordered raw ADC counts with their
-frame context.
+**Objective 1:** **Frame entry.** The Primary Data Pipeline shall admit a frame
+only when its identity and status are present and it contains all 3648 effective
+detector samples in acquisition order.
 
-   Rationale: Completeness, compatibility, and ordered preservation prevent
-   incomplete, incompatible, or misordered input from advancing.
+**Rationale:** Blocking incomplete or unidentified frames prevents missing or
+misordered detector data from entering measurement processing.
 
-**Objective 2:** The Host PC primary-data-pipeline system shall apply enabled,
-available, and compatible bias and dark terms while preserving raw counts and
-correction metadata.
+**Objective 2:** **Processing sequence.** The Primary Data Pipeline shall
+perform bias and dark correction, bad-pixel handling, wavelength mapping, and
+configured spectral corrections without overwriting the source raw counts.
 
-   Rationale: Conditional correction prevents unavailable or incompatible
-   calibration data from silently changing the measurement.
+**Rationale:** A defined sequence and preserved source values allow every
+derived result to be traced back to the detector measurement.
 
-**Objective 3:** The Host PC primary-data-pipeline system shall qualify known
-unreliable detector positions using a geometry-compatible mask and retain mask
-identity and affected positions.
+**Objective 3:** **Record output.** The Primary Data Pipeline shall associate
+raw counts, processed counts, wavelength, volts when defined, and processed
+intensity with the same source frame and shall mark the record session-ready
+only when the arrays are complete and aligned.
 
-   Rationale: Geometry qualification prevents unreliable positions from
-   silently qualifying as valid while preserving mask provenance.
-
-**Objective 4:** The Host PC primary-data-pipeline system shall associate each
-effective detector position with wavelength using an approved map and retain
-coverage and known-reference residual evidence.
-
-   Rationale: Approved mapping protects wavelength meaning and retained
-   residual evidence supports validation traceability.
-
-**Objective 5:** The Host PC primary-data-pipeline system shall apply separately
-configured flat-field or PRNU, spectral-response or QE, and normalization
-operations only when their required inputs and bases are defined and
-compatible.
-
-   Rationale: Prerequisite and compatibility gating prevent distinct or
-   undefined corrections from being conflated or applied without required
-   inputs.
-
-**Objective 6:** The Host PC primary-data-pipeline system shall preserve raw
-counts, align raw counts, processed counts, wavelength, volts when defined, and
-processed intensity, and mark the record session-ready only when required
-products are complete and aligned.
-
-   Rationale: Source preservation and product alignment keep derived products
-   tied to one measurement and retain recovery and reprocessing value.
+**Rationale:** Source identity and array alignment prevent values from different
+frames or detector positions from being combined.
 
 .. _uuid-82ddd480-efc3-48b7-beb6-e3ed17755f65:
 

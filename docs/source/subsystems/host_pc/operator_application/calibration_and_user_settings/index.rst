@@ -25,42 +25,28 @@ System Objectives
 
 UUID: :ref:`88EFFB81-07DA-4B40-ACDA-D750932C774F <uuid-88effb81-07da-4b40-acda-d750932c774f>`
 
-**Objective 1:** The Host PC calibration-and-user-settings system shall present
-bias or dark, wavelength, flat-field or PRNU, and spectral-response or QE
-selection categories.
+**Objective 1:** **Selection input.** Calibration and User Settings shall
+present bias or dark, wavelength, flat-field or PRNU, and spectral-response or
+QE selections together with their detector and processing-context metadata.
 
-   Rationale: Visible configuration categories allow each supported calibration
-   input to be selected independently.
+**Rationale:** Presenting each selection with its context gives the operator the
+information needed to distinguish calibration data intended for different
+measurement configurations.
 
-**Objective 2:** The Host PC calibration-and-user-settings system shall validate
-requested selections against the active detector and processing context.
+**Objective 2:** **Selection activation.** Calibration and User Settings shall
+compare the selection metadata with the active detector and processing context,
+reject missing or mismatched selections, and preserve the current configuration
+after rejection.
 
-   Rationale: Compatibility validation prevents configuration intended for a
-   different detector or processing context from being activated.
+**Rationale:** Context comparison prevents calibration data from a different
+detector or processing path from silently changing the measurement.
 
-**Objective 3:** The Host PC calibration-and-user-settings system shall activate
-accepted selections for subsequent processing.
+**Objective 3:** **Persistence outcome.** Calibration and User Settings shall
+save or recall user settings, report the result, and preserve the current
+configuration when the operation fails.
 
-   Rationale: Activation establishes the accepted configuration that governs
-   later processing.
-
-**Objective 4:** The Host PC calibration-and-user-settings system shall prevent
-missing or incompatible selections from being silently activated.
-
-   Rationale: Explicit rejection prevents an unavailable selection or silent
-   substitution from changing later processing.
-
-**Objective 5:** The Host PC calibration-and-user-settings system shall save or
-recall user settings and report the outcome.
-
-   Rationale: Outcome reporting confirms whether the requested configuration
-   change became available.
-
-**Objective 6:** The Host PC calibration-and-user-settings system shall preserve
-the current active configuration when selection, save, or recall fails.
-
-   Rationale: Preserving a known active configuration prevents a failed request
-   from leaving the governing settings ambiguous.
+**Rationale:** Preserving the active configuration after failure prevents a
+partial save or recall from leaving processing state ambiguous.
 
 .. _uuid-15ed5613-3a5a-4d14-bb75-0785f7ef044e:
 

@@ -24,45 +24,26 @@ System Objectives
 
 UUID: :ref:`0498C724-6D5B-4E8F-8E55-3B0CA76CC9B0 <uuid-0498c724-6d5b-4e8f-8e55-3b0ca76cc9b0>`
 
-**Objective 1:** The Host PC bias-and-dark-correction system shall receive
-preserved raw ADC counts with enabled stored-bias, covered-input dark, and
-optional per-pixel terms.
+**Objective 1:** **Correction calculation.** Bias and Dark Correction shall
+calculate ``C_corr(p) = C_raw(p) - B(p) - D(p)`` using only correction terms
+that are enabled and present.
 
-   Rationale: Receiving the raw measurement and applicable references together
-   establishes the inputs needed to qualify each requested correction.
+**Rationale:** Applying only present and enabled terms prevents an absent
+reference from silently changing the measurement.
 
-**Objective 2:** The Host PC bias-and-dark-correction system shall apply
-``C_corr(p) = C_raw(p) - B(p) - D(p)`` only for enabled, available, and
-applicable terms.
+**Objective 2:** **Reference use.** Bias and Dark Correction shall derive the
+frame-wise dark term from the configured covered-input samples and shall apply
+per-pixel offsets only when each offset is associated with a detector position.
 
-   Rationale: Applying only applicable terms prevents unavailable or disabled
-   correction data from changing the measurement.
+**Rationale:** Defined sample sources and detector-position association prevent
+baseline terms from being applied to the wrong pixels.
 
-**Objective 3:** The Host PC bias-and-dark-correction system shall use approved
-covered-input data for the configured frame-wise dark reference without
-inventing an estimator.
+**Objective 3:** **Output and diagnostics.** Bias and Dark Correction shall
+preserve raw counts, record each applied or bypassed term, and prevent records
+containing missing references or non-finite corrected values from advancing.
 
-   Rationale: Restricting the dark reference to approved data protects the
-   correction from an undocumented estimation method.
-
-**Objective 4:** The Host PC bias-and-dark-correction system shall apply
-optional per-pixel offsets only when they are enabled and compatible.
-
-   Rationale: Compatibility gating prevents offsets from being applied to the
-   wrong detector geometry or acquisition context.
-
-**Objective 5:** The Host PC bias-and-dark-correction system shall preserve raw
-counts and record every applied or bypassed correction.
-
-   Rationale: Raw-data preservation and correction metadata support recovery
-   of the source measurement and reproducibility of the corrected result.
-
-**Objective 6:** The Host PC bias-and-dark-correction system shall identify
-missing references, disabled corrections, and non-finite outputs rather than
-silently qualifying affected data.
-
-   Rationale: Exposing unavailable or invalid correction states prevents
-   affected results from appearing fully qualified.
+**Rationale:** Raw-data preservation and explicit diagnostics make the
+correction reproducible and keep invalid results out of later stages.
 
 .. _uuid-72023a0d-3ea2-4c32-b64f-7186bedf58c7:
 

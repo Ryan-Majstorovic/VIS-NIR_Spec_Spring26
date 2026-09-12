@@ -24,49 +24,27 @@ System Objectives
 
 UUID: :ref:`9BE2B69A-07FA-42E3-8E83-7FDE0675F396 <uuid-9be2b69a-07fa-42e3-8e83-7fde0675f396>`
 
-**Objective 1:** The Host PC integration-time-control system shall receive the
-operator-requested integration time together with the current connection and
-acquisition state.
+**Objective 1:** **Request entry.** Integration-Time Control shall capture the
+requested integration-time value with the current connection and acquisition
+state and shall submit the request only while device control is available.
 
-   Rationale: Retaining request and system state together preserves the context
-   in which the change was requested.
+**Rationale:** Retaining the request context prevents a value from being applied
+through a stale or unavailable connection.
 
-**Objective 2:** The Host PC integration-time-control system shall validate a
-requested integration time against approved device constraints when those
-constraints are documented.
+**Objective 2:** **Device outcome.** Integration-Time Control shall report the
+request as accepted, rejected, or unavailable without treating a missing
+response as acceptance.
 
-   Rationale: Constraint validation prevents a known-invalid request from being
-   submitted as an acceptable device setting.
+**Rationale:** Explicit outcome classification prevents an unconfirmed setting
+from being presented as active.
 
-**Objective 3:** The Host PC integration-time-control system shall submit an
-eligible request through the Integration control interface.
+**Objective 3:** **Value activation.** Integration-Time Control shall
+distinguish requested, pending, and active values, apply an accepted value at
+the defined acquisition boundary, and preserve the current active value after
+rejection.
 
-   Rationale: Using the shared control boundary keeps host intent and device
-   application within one interface contract.
-
-**Objective 4:** The Host PC integration-time-control system shall classify the
-device outcome as accepted, rejected, or unavailable and shall expose that
-outcome to the operator workflow.
-
-   Rationale: Explicit classification prevents rejection or interface
-   unavailability from being mistaken for acceptance.
-
-**Objective 5:** The Host PC integration-time-control system shall expose
-whether an accepted value is pending or active and shall apply the value at the
-documented subsequent acquisition boundary.
-
-   Rationale: Distinguishing pending from active prevents measurements from
-   being associated with a setting that has not yet taken effect.
-
-**Objective 6:** The Host PC integration-time-control system shall leave the
-active integration-time value unchanged after rejection or interface
-unavailability.
-
-   Rationale: Preserving the prior active value prevents an unsuccessful
-   request from changing the measurement context.
-
-Units, range, quantization, default, acknowledgment, and exact application
-boundary remain ``Not In Docs``.
+**Rationale:** Separating requested and active values prevents the operator from
+mistaking an unapplied setting for current device behavior.
 
 .. _uuid-b88e3829-f9d3-492a-b983-187076e993f8:
 

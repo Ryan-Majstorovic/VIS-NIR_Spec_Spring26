@@ -34,34 +34,26 @@ System Objectives
 
 UUID: :ref:`B5095B6C-C6FD-4966-9685-AE6966CEDA21 <uuid-b5095b6c-c6fd-4966-9685-ae6966ceda21>`
 
-**Objective 1:** The Embedded timing system shall generate fM, SH, ICG, and ADC
-trigger behavior that satisfies the approved detector timing requirements.
+**Objective 1:** **Timing and acquisition.** The Embedded system shall generate
+the fM, SH, ICG, and ADC-trigger signals and preserve all 3648 effective
+detector samples in acquisition order.
 
-   Rationale: The detector requires coordinated timing waveforms to shift and
-   sample charge correctly.
+**Rationale:** Stable timing and ordered sampling preserve the relationship
+between detector position and measured signal.
 
-**Objective 2:** The Embedded acquisition system shall preserve all 3648
-effective detector samples in acquisition order within each complete measurement
-frame.
+**Objective 2:** **Transport and control.** The Embedded system shall transfer
+each complete frame with its frame identity and status over USB CDC and process
+start, stop, and integration-time requests through the Integration interface.
 
-   Rationale: Preserving sample order maintains the detector-position
-   relationship required for downstream wavelength mapping.
+**Rationale:** A defined transport and control boundary prevents partial frames
+or unresolved commands from being treated as completed measurements.
 
-**Objective 3:** The Embedded USB CDC system shall provide complete frames,
-frame identity, and status information to the Host PC system through the
-Integration boundary.
+**Objective 3:** **Verification evidence.** The Embedded system shall produce
+requirements-linked test records for detector timing, frame acquisition, USB
+transfer, control handling, and driver-board operation.
 
-   Rationale: Frame identity and status allow the receiver to detect missing or
-   faulted captures and associate received data with the correct measurement
-   frame.
-
-**Objective 4:** The Embedded calibration and validation system shall provide
-requirements-linked evidence that the timing, acquisition, transfer, control,
-and driver-board functions satisfy their approved requirements.
-
-   Rationale: Requirements-linked evidence makes each Embedded responsibility
-   independently reviewable and prevents a passing result in one function from
-   masking an unresolved failure in another.
+**Rationale:** Requirements-linked records make failures traceable to the
+Embedded function that produced them.
 
 .. _uuid-8e892af2-4ec5-40ac-922b-4e1dce44264a:
 

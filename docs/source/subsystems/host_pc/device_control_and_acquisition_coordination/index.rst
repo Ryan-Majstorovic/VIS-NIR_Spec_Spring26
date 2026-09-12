@@ -25,66 +25,28 @@ System Objectives
 
 UUID: :ref:`3F2992AB-FC13-4F13-8BD3-089102B2636B <uuid-3f2992ab-fc13-4f13-8bd3-089102b2636b>`
 
-**Objective 1:** The Host PC device-control and acquisition-coordination system
-shall maintain Disconnected, Connecting, Ready, and Unavailable connection
-states and gate acquisition and command actions until the connection is Ready.
+**Objective 1:** **Connection control.** Device Control and Acquisition
+Coordination shall maintain the Disconnected, Connecting, Ready, and Unavailable
+states and allow device-dependent actions only while the connection is Ready.
 
-   Rationale: Explicit readiness prevents an absent, incomplete, or unusable
-   connection from authorizing control actions.
+**Rationale:** Explicit readiness gating prevents commands and acquisition
+requests from being sent through an unavailable connection.
 
-**Objective 2:** The Host PC device-control and acquisition-coordination system
-shall remove readiness, gate dependent actions, and expose unavailability after
-an operator disconnect or observed connection loss.
+**Objective 2:** **Request control.** Device Control and Acquisition
+Coordination shall submit start, stop, integration-time, and operator-command
+requests using the current connection and acquisition state and shall advance
+state only after an accepted outcome.
 
-   Rationale: Removing stale readiness prevents later actions from relying on a
-   device that can no longer accept them.
+**Rationale:** Outcome-driven state changes prevent rejected, failed, or missing
+responses from being represented as successful device actions.
 
-**Objective 3:** The Host PC device-control and acquisition-coordination system
-shall accept acquisition start only while the connection is Ready and represent
-acquisition as active only after an accepted start outcome.
+**Objective 3:** **Session reporting.** Device Control and Acquisition
+Coordination shall associate complete frames with the active session and report
+connection, acquisition, integration-time, command, session-disposition, and
+rate information.
 
-   Rationale: Ready-state and outcome gating prevent a pending or unsuccessful
-   start from appearing active.
-
-**Objective 4:** The Host PC device-control and acquisition-coordination system
-shall route complete frames only while acquisition is active, expose the stop
-outcome and complete, partial, or interrupted session disposition, and prevent
-unresolved post-stop data from being represented as complete.
-
-   Rationale: Active-session routing and visible disposition keep frames
-   associated with a valid session and prevent incomplete data from appearing
-   complete.
-
-The exact stop and drain boundary remains ``Not In Docs``.
-
-**Objective 5:** The Host PC device-control and acquisition-coordination system
-shall validate integration-time requests against documented constraints when
-available, submit eligible requests, and distinguish accepted, rejected,
-unavailable, pending, and active states.
-
-   Rationale: Validation and state distinction prevent an invalid or
-   unsuccessful request from being represented as the active measurement
-   setting.
-
-The exact integration-time application boundary remains ``Not In Docs``.
-
-**Objective 6:** The Host PC device-control and acquisition-coordination system
-shall gate commands using current preconditions, distinguish success, failure,
-rejection, unavailable, and missing outcomes, and permit only dependent actions
-authorized by the outcome.
-
-   Rationale: Outcome-based gating prevents host and acquisition state from
-   advancing after a failed or unresolved command.
-
-**Objective 7:** The Host PC device-control and acquisition-coordination system
-shall expose connection, acquisition-session, integration-time-request,
-command-outcome, and applicable rate-profile state to operator and processing
-workflows.
-
-   Rationale: Visible state lets dependent workflows distinguish ready,
-   pending, active, rejected, and unavailable conditions while keeping
-   acquisition transport, display update, and the above-100-fps system design
-   target separate.
+**Rationale:** A common session context keeps device state, received frames, and
+operator-visible results synchronized.
 
 .. _uuid-a75379eb-011d-4a55-a11f-f9ec8a3c480d:
 

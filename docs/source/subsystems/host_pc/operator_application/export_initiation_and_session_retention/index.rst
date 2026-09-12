@@ -26,42 +26,27 @@ System Objectives
 
 UUID: :ref:`F3449780-965F-4C92-BC90-6CC21F8EF0B0 <uuid-f3449780-965f-4c92-bc90-6cc21f8ef0b0>`
 
-**Objective 1:** The Host PC export-initiation-and-session-retention system
-shall accept export requests only for retained acquisition sessions.
+**Objective 1:** **Export entry.** Export Initiation and Session Retention shall
+accept an export request only for a retained session containing raw counts,
+processed counts, wavelength, volts, and processed intensity associated with
+the same measurement.
 
-   Rationale: Retained-session eligibility preserves the acquisition context of
-   the requested export.
+**Rationale:** Requiring the five products from one measurement prevents
+incomplete or cross-session data from entering the CSV.
 
-**Objective 2:** The Host PC export-initiation-and-session-retention system
-shall confirm aligned raw ADC counts, processed counts, wavelength, volts, and
-processed intensity before export.
+**Objective 2:** **CSV creation.** Export Initiation and Session Retention shall
+create one CSV row per detector position while preserving correspondence among
+the five data products.
 
-   Rationale: Product alignment preserves row and value correspondence across
-   raw and derived data.
+**Rationale:** Row-level correspondence keeps every raw and derived value tied
+to the same detector position.
 
-**Objective 3:** The Host PC export-initiation-and-session-retention system
-shall create CSV output containing the five required data products.
+**Objective 3:** **Outcome and retention.** Export Initiation and Session
+Retention shall report success, failure, or incomplete output and shall
+preserve the retained session when CSV creation fails.
 
-   Rationale: Including raw and derived products makes the required measurement
-   data available to downstream review workflows.
-
-**Objective 4:** The Host PC export-initiation-and-session-retention system
-shall report successful, failed, or incomplete export outcomes.
-
-   Rationale: Explicit outcome reporting prevents an unsuccessful or partial
-   export from appearing successful.
-
-**Objective 5:** The Host PC export-initiation-and-session-retention system
-shall preserve retained data needed for review when export fails.
-
-   Rationale: Preserving retained data supports recovery and review after a
-   write failure.
-
-**Objective 6:** The Host PC export-initiation-and-session-retention system
-shall keep the session available according to the approved retention policy.
-
-   Rationale: Policy-controlled availability supports later export or review
-   without inventing a retention duration or storage mechanism.
+**Rationale:** Preserving the session supports review or another export attempt
+without reacquiring the measurement.
 
 .. _uuid-86047674-7d5d-411c-b6c5-929214569601:
 

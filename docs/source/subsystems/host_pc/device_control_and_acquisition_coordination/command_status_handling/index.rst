@@ -24,42 +24,26 @@ System Objectives
 
 UUID: :ref:`DE4415BD-A210-4D0A-AD19-9CC0555CC4DA <uuid-de4415bd-a210-4d0a-ad19-9cc0555cc4da>`
 
-**Objective 1:** The Host PC command-status-handling system shall gate an
-operator command using the current connection and acquisition preconditions.
+**Objective 1:** **Command entry.** Command-Status Handling shall compare each
+operator command with the current connection and acquisition state before
+submitting it through the Integration interface.
 
-   Rationale: Precondition gating prevents a command from being submitted when
-   the device or acquisition state cannot support it.
+**Rationale:** State-based gating prevents commands from being issued when their
+device or acquisition preconditions are absent.
 
-**Objective 2:** The Host PC command-status-handling system shall submit an
-eligible command through the Integration control interface.
+**Objective 2:** **Outcome classification.** Command-Status Handling shall
+classify the response as success, failure, rejection, unavailable, or missing
+and shall preserve the returned failure information.
 
-   Rationale: Using the shared control interface keeps the request associated
-   with the device outcome returned for it.
+**Rationale:** Distinct outcomes retain the cause of an unsuccessful command
+instead of reducing every failure to one ambiguous state.
 
-**Objective 3:** The Host PC command-status-handling system shall classify the
-returned outcome as success, failure, rejection, or unavailable and shall not
-report a missing outcome as success.
+**Objective 3:** **Dependent actions.** Command-Status Handling shall enable
+dependent actions after success and shall prevent state advancement after
+failure, rejection, unavailability, or a missing response.
 
-   Rationale: Complete classification prevents unsuccessful or unresolved
-   commands from advancing the success path.
-
-**Objective 4:** The Host PC command-status-handling system shall expose a
-normalized command status, preserve failure context, and distinguish rejection
-from transport failure.
-
-   Rationale: Preserving the outcome class gives operator and dependent
-   workflows the information needed to respond safely.
-
-**Objective 5:** The Host PC command-status-handling system shall update only
-the dependent actions permitted by the classified outcome and shall not
-advance acquisition after failure, rejection, unavailability, or a missing
-outcome.
-
-   Rationale: Outcome-based gating prevents host state from representing a
-   device action that did not succeed.
-
-Command vocabulary, status vocabulary, timeout, retry, and recovery rules
-remain ``Not In Docs``.
+**Rationale:** Outcome-controlled advancement prevents downstream workflows from
+acting on a command that did not complete.
 
 .. _uuid-420fbe4d-a7ae-40e6-bbe6-696a0fdc08e1:
 

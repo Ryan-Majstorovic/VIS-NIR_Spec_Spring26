@@ -25,72 +25,28 @@ System Objectives
 
 UUID: :ref:`90977A32-CB75-4745-B6D0-470F1B5116BE <uuid-90977a32-cb75-4745-b6d0-470f1b5116be>`
 
-**Objective 1:** The Host PC Primary Data Pipeline shall accept only complete
-measurement frames from the Integration boundary and preserve all 3648
-effective detector samples in acquisition order with their frame context for
-processing.
+**Objective 1:** **Measurement processing.** The Host PC Primary Data Pipeline
+shall receive complete frames, preserve the 3648 effective samples and raw
+counts, perform the configured processing stages, and produce aligned spectrum
+records.
 
-   Rationale: Complete-frame qualification and ordered preservation protect
-   detector position and frame identity from incomplete or reordered input.
+**Rationale:** Ordered source preservation and aligned outputs protect the
+connection between the detector measurement and every derived value.
 
-**Objective 2:** The Host PC Primary Data Pipeline shall apply approved and
-compatible processing and calibration inputs to qualified detector data to
-produce corrected, wavelength-associated spectra.
+**Objective 2:** **Device coordination.** The Host PC Device Control and
+Acquisition Coordination system shall manage connection state, start and stop
+acquisition, submit integration-time and command requests, and associate
+received frames with the active session.
 
-   Rationale: Input approval and compatibility prevent unavailable,
-   incompatible, or undefined processing inputs from silently changing
-   measurement meaning.
+**Rationale:** Coordinating requests with connection and session state prevents
+device actions or frames from being assigned to the wrong acquisition.
 
-**Objective 3:** The Host PC Primary Data Pipeline shall preserve source raw
-counts and assemble aligned raw and derived measurement products into a
-session-ready record for operator use.
+**Objective 3:** **Operator workflow.** The Host PC Operator Application shall
+display spectra and system status, manage processing selections, retain session
+data, and create CSV exports.
 
-   Rationale: Source preservation and product alignment keep every derived
-   value traceable to the same measurement and usable by downstream Host PC
-   workflows.
-
-**Objective 4:** The Host PC Device Control And Acquisition Coordination system
-shall establish and maintain device connection readiness and gate
-device-dependent actions until the connection is usable.
-
-   Rationale: Readiness gating prevents unavailable or incomplete connections
-   from authorizing control actions.
-
-**Objective 5:** The Host PC Device Control And Acquisition Coordination system
-shall coordinate setting, acquisition-start, and acquisition-stop requests with
-current connection and session state and shall advance dependent state only for
-accepted outcomes.
-
-   Rationale: Outcome-based state advancement prevents requested or failed
-   device actions from being represented as active.
-
-**Objective 6:** The Host PC Device Control And Acquisition Coordination system
-shall associate complete frames with an active acquisition and expose control
-and session outcomes to processing and operator workflows.
-
-   Rationale: Preserving acquisition context and exposing outcomes make
-   incomplete, interrupted, rejected, or unavailable conditions visible.
-
-**Objective 7:** The Host PC Operator Application shall coordinate operator
-session actions and accepted configuration with visible connection and
-acquisition state.
-
-   Rationale: State and configuration visibility prevent unavailable,
-   out-of-sequence, or ambiguously configured actions from appearing valid.
-
-**Objective 8:** The Host PC Operator Application shall present qualified
-spectra together with device and session status and shall identify unavailable,
-stale, or invalid presentation data.
-
-   Rationale: Operating context and data qualification let the operator
-   interpret measurements without mistaking invalid data for current data.
-
-**Objective 9:** The Host PC Operator Application shall retain eligible
-session-associated data, initiate the required CSV export, report its outcome,
-and preserve reviewable data after an unsuccessful export.
-
-   Rationale: Retaining the source session and reviewable data prevents failed
-   or incomplete output from appearing successful.
+**Rationale:** A single operator workflow keeps presentation, configuration,
+retention, and export tied to the same measurement session.
 
 .. _uuid-55f3ab31-2428-4459-a33f-4cc03984fd05:
 

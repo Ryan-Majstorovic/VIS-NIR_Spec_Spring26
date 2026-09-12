@@ -25,41 +25,27 @@ System Objectives
 
 UUID: :ref:`FB55B99E-7AA5-4582-A2C5-8824EF9D8B32 <uuid-fb55b99e-7aa5-4582-a2c5-8824ef9d8b32>`
 
-**Objective 1:** The Host PC session-control system shall gate connection and
-acquisition actions using current connection and acquisition status.
+**Objective 1:** **Connection readiness.** Session Control shall establish a
+Ready connection before enabling acquisition actions.
 
-   Rationale: State-based gating prevents actions that are invalid for the
-   current connection or acquisition condition.
+**Rationale:** Requiring Ready prevents acquisition requests from being issued
+before the device-control path is usable.
 
-**Objective 2:** The Host PC session-control system shall establish readiness
-before acquisition actions become available.
+**Objective 2:** **Active session.** Session Control shall start an acquisition
+session, present its current state, and make accepted processed records
+available for inspection.
 
-   Rationale: Readiness qualification prevents acquisition from beginning
-   before its required connection state is available.
+**Rationale:** A visible active-session boundary ties displayed measurements to
+the acquisition that produced them.
 
-**Objective 3:** The Host PC session-control system shall start an acquisition
-session and present its current state.
+**Objective 3:** **Session termination.** Session Control shall stop or pause
+acquisition, retain the resulting session data, expose connection loss and
+unavailable actions, and disconnect without representing an interrupted
+session as complete.
 
-   Rationale: Presenting session state preserves the association between
-   operator actions and the acquisition they govern.
-
-**Objective 4:** The Host PC session-control system shall make accepted
-processed data available for inspection during the session.
-
-   Rationale: Inspection access allows the operator to review qualified data in
-   the context of the active session.
-
-**Objective 5:** The Host PC session-control system shall stop or pause
-according to the approved acquisition policy and retain eligible session data.
-
-   Rationale: Controlled finalization and retention preserve eligible data when
-   acquisition activity changes state.
-
-**Objective 6:** The Host PC session-control system shall expose connection
-loss and unavailable actions and disconnect safely.
-
-   Rationale: Loss visibility and safe disconnection prevent a disconnected
-   session from appearing active.
+**Rationale:** Explicit termination handling preserves partial data while
+preventing an interrupted session from receiving a false successful
+disposition.
 
 .. _uuid-d8b9bb75-d5c6-4efd-8d3b-d1668c6befb4:
 

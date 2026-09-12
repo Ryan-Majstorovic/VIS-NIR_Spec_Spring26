@@ -25,45 +25,28 @@ System Objectives
 
 UUID: :ref:`1ED83EC4-F108-42F9-AF0B-FA83FB8F431D <uuid-1ed83ec4-f108-42f9-af0b-fa83fb8f431d>`
 
-**Objective 1:** The Host PC processed-spectrum-output-and-retention system
-shall associate raw ADC counts, processed counts, wavelength, volts when
-defined, and processed intensity with the same source measurement.
+**Objective 1:** **Product alignment.** Processed Spectrum Output and Retention
+shall associate raw counts, processed counts, wavelength, volts when defined,
+and processed intensity with the same frame identity and detector-position
+index.
 
-   Rationale: Common measurement identity prevents products from different
-   acquisitions from being combined into one record.
+**Rationale:** Frame identity and detector-position indexing prevent unrelated
+values from being combined in one measurement record.
 
-**Objective 2:** The Host PC processed-spectrum-output-and-retention system
-shall preserve raw ADC counts independently of derived values.
+**Objective 2:** **Session readiness.** Processed Spectrum Output and Retention
+shall preserve raw counts and mark a record session-ready only when all
+required product arrays are present and have matching lengths.
 
-   Rationale: Independent raw-data preservation supports recovery and later
-   reprocessing without treating a derived value as the source measurement.
+**Rationale:** Completeness and equal array lengths protect one-to-one
+correspondence across exported and displayed products.
 
-**Objective 3:** The Host PC processed-spectrum-output-and-retention system
-shall maintain one-to-one correspondence among available product arrays.
+**Objective 3:** **Record handoff.** Processed Spectrum Output and Retention
+shall retain session-ready records for visualization and export and shall
+report missing products, mismatched identities, unequal array lengths, and
+retention failures.
 
-   Rationale: Array correspondence prevents wavelength, counts, volts, or
-   intensity from being assigned to the wrong detector position.
-
-**Objective 4:** The Host PC processed-spectrum-output-and-retention system
-shall mark a record ready only when required products are complete and aligned.
-
-   Rationale: Readiness gating prevents incomplete or mismatched products from
-   appearing as a usable spectrum record.
-
-**Objective 5:** The Host PC processed-spectrum-output-and-retention system
-shall retain the session-ready record and provide it to visualization,
-retention, and export initiation without owning the export user interface.
-
-   Rationale: A defined application handoff keeps the data product available to
-   operator workflows without moving export-interface behavior into the
-   pipeline.
-
-**Objective 6:** The Host PC processed-spectrum-output-and-retention system
-shall report missing products, incompatible identities or lengths, and
-retention failures and gate affected outputs.
-
-   Rationale: Failure visibility and gating prevent incomplete or unretained
-   records from silently advancing to application use.
+**Rationale:** Gated handoff prevents incomplete or internally inconsistent
+records from reaching operator and storage workflows.
 
 .. _uuid-c17f356a-d747-4a3a-985a-98dea2055235:
 

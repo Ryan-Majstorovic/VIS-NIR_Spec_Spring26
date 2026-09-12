@@ -831,3 +831,5 @@ serial.serialutil.SerialException: could not open port 'COM4': FileNotFoundError
 2026-07-02 22:04:55,296 INFO kivy: GL: NPOT texture support is available
 2026-07-02 22:04:55,659 INFO kivy: Base: Start application main loop
 2026-07-03 03:16:17,462 INFO kivy: Base: Leaving application in progress...
+2026-09-12 11:56:54,103 INFO kivy: GL: NPOT texture support is available
+2026-09-12 11:56:54,468 INFO kivy: Base: Start application main loop

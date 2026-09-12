@@ -33,34 +33,27 @@ System Objectives
 
 UUID: :ref:`3A113E98-E52C-4B54-8624-4939610E4ED2 <uuid-3a113e98-e52c-4b54-8624-4939610e4ed2>`
 
-**Objective 1:** The Optics optical-path system shall accept incident light,
-collimate it, disperse it by wavelength, and focus the resulting spectrum
+**Objective 1:** **Optical transformation.** The Optics system shall accept
+incident light, collimate it, disperse it by wavelength, and focus the spectrum
 across the detector.
 
-   Rationale: Collimation, dispersion, and focusing establish the spatial
-   wavelength distribution that the detector samples.
+**Rationale:** Preserving this sequence establishes the detector-position
+relationship required for wavelength measurement.
 
-**Objective 2:** The Optics tradeoff system shall assess how grating, slit,
-mirror, and filter selections affect wavelength coverage, resolution,
-throughput, stray light, and alignment.
+**Objective 2:** **Component and filtering decisions.** The Optics system shall
+record how the grating, slit, mirrors, and filters affect wavelength coverage,
+resolution, throughput, second-order overlap, stray light, and alignment.
 
-   Rationale: Recording the optical consequences of each selection supports
-   component decisions without separating them from system-level performance.
+**Rationale:** Recording each tradeoff prevents a component choice from changing
+instrument performance without reviewable evidence.
 
-**Objective 3:** The Optics filtering system shall limit second-order overlap
-and unwanted wavelength content before detector capture.
+**Objective 3:** **Physical verification.** The Optics system shall provide
+alignment, enclosure, and characterization evidence for wavelength coverage,
+FWHM, wavelength accuracy, SNR, linearity, repeatability, stray light, and
+reference comparison.
 
-   Rationale: Limiting unwanted optical content prevents the detector from
-   measuring overlapping spectral orders as if they were a single wavelength
-   response.
-
-**Objective 4:** The Optics alignment, enclosure, and characterization system
-shall provide evidence for wavelength coverage, FWHM, wavelength accuracy, SNR,
-linearity, repeatability, stray light, and reference comparison.
-
-   Rationale: Evidence from a stable, light-controlled optical configuration
-   allows performance results to be repeated and compared against the approved
-   optical requirements.
+**Rationale:** Physical evidence is needed to distinguish predicted optical
+performance from measured instrument performance.
 
 .. _uuid-e19ea297-0d3d-4bb1-b420-629bde897454:
 

@@ -25,42 +25,26 @@ System Objectives
 
 UUID: :ref:`F46A89E2-57AF-4F66-A6C3-581CCA0A2CFA <uuid-f46a89e2-57af-4f66-a6c3-581cca0a2cfa>`
 
-**Objective 1:** The Host PC spectral-corrections system shall receive
-wavelength-associated, bias-and-dark-corrected, bad-pixel-qualified data.
+**Objective 1:** **Correction entry.** Spectral Corrections shall apply
+flat-field or PRNU, spectral-response or QE, and normalization operations only
+when the selected factor and its pixel or wavelength association are present.
 
-   Rationale: Requiring prior qualification protects spectral corrections from
-   being applied before detector and wavelength prerequisites are established.
+**Rationale:** Requiring both the factor and its axis association prevents a
+correction from being applied to unrelated detector positions or wavelengths.
 
-**Objective 2:** The Host PC spectral-corrections system shall apply flat-field
-or PRNU correction only when it is enabled and compatible.
+**Objective 2:** **Correction record.** Spectral Corrections shall apply each
+configured operation separately and record the input, factor, basis, and result
+of each applied or bypassed operation.
 
-   Rationale: Independent compatibility gating prevents an unavailable or
-   mismatched flat-field factor from changing the spectrum.
+**Rationale:** Separate records preserve the effect and provenance of each
+spectral transformation.
 
-**Objective 3:** The Host PC spectral-corrections system shall apply
-spectral-response or QE correction only when it is enabled and compatible.
+**Objective 3:** **Output and diagnostics.** Spectral Corrections shall report
+missing factors, saturation, undefined normalization bases, and non-finite
+results and shall prevent affected records from advancing.
 
-   Rationale: Independent compatibility gating prevents response factors from
-   being conflated with another correction or applied to incompatible data.
-
-**Objective 4:** The Host PC spectral-corrections system shall apply
-normalization only when its basis is defined.
-
-   Rationale: A defined normalization basis is necessary to reproduce and
-   interpret the resulting intensity scale.
-
-**Objective 5:** The Host PC spectral-corrections system shall preserve
-correction inputs and record every applied or bypassed operation.
-
-   Rationale: Preserved inputs and operation metadata support reproducibility
-   and distinguish configured corrections from bypassed ones.
-
-**Objective 6:** The Host PC spectral-corrections system shall identify missing
-factors, saturation, and invalid results and prevent affected outputs from
-silently qualifying.
-
-   Rationale: Invalid-result containment prevents affected spectra from
-   appearing fully qualified for downstream use.
+**Rationale:** Explicit fault handling prevents invalid numerical results from
+being presented or retained as usable spectra.
 
 .. _uuid-367106a7-1f63-45f4-a2c6-40249f5d88ae:
 

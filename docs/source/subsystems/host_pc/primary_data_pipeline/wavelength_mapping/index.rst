@@ -24,38 +24,26 @@ System Objectives
 
 UUID: :ref:`500B2C55-787B-4AE7-B6B3-6DD20C6360DF <uuid-500b2c55-787b-4ae7-b6b3-6dd20c6360df>`
 
-**Objective 1:** The Host PC wavelength-mapping system shall receive ordered
-effective-pixel positions, corrected values, and an approved
-pixel-to-wavelength map.
+**Objective 1:** **Position mapping.** Wavelength Mapping shall use a
+pixel-to-wavelength relationship to assign one wavelength to each effective
+detector position and corrected detector value.
 
-   Rationale: Receiving ordered positions and the approved map together
-   establishes the inputs needed for unambiguous wavelength association.
+**Rationale:** One wavelength per detector position preserves the relationship
+among position, corrected value, and reported wavelength.
 
-**Objective 2:** The Host PC wavelength-mapping system shall associate one
-wavelength with each effective detector position using the general relationship
-``lambda(p) = f(p)``.
+**Objective 2:** **Coverage evidence.** Wavelength Mapping shall compare the
+resulting wavelength array with the 400-1000 nm target and retain residuals
+calculated from known reference wavelengths.
 
-   Rationale: One-to-one association protects the correspondence between
-   detector position, corrected value, and reported wavelength.
+**Rationale:** Coverage and residual evidence show where the wavelength
+assignment is supported by reference measurements.
 
-**Objective 3:** The Host PC wavelength-mapping system shall evaluate intended
-coverage against the documented 400-1000 nm target.
+**Objective 3:** **Output and diagnostics.** Wavelength Mapping shall prevent
+the mapped record from advancing when the map is absent and shall report
+incomplete coverage and wavelength residuals.
 
-   Rationale: Coverage evaluation distinguishes the intended wavelength range
-   from detector positions that do not support that interpretation.
-
-**Objective 4:** The Host PC wavelength-mapping system shall retain
-known-reference residual evidence with the mapped product.
-
-   Rationale: Residual evidence supports validation traceability for the
-   wavelength association.
-
-**Objective 5:** The Host PC wavelength-mapping system shall block or qualify
-output when the map is unavailable, coverage is limited, or residual evidence
-is unaccepted.
-
-   Rationale: Output gating prevents an unavailable or unvalidated map from
-   producing an unqualified wavelength claim.
+**Rationale:** Blocking an absent map prevents detector positions from being
+reported with unsupported wavelength meaning.
 
 .. _uuid-d82fc69a-e22a-43ea-9ce6-50eddaf3af89:
 
