@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Literal, TypeAlias
 
+import numpy as np
 from pydantic import BaseModel, Field
 
 
@@ -37,7 +39,21 @@ class FramePacket(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
 
 
-DevicePacket: TypeAlias = BannerPacket | TextLinePacket | FramePacket
+@dataclass(slots=True)
+class BinaryFramePacket:
+    """Purpose: carry one parsed binary CCD frame without per-pixel Python objects. Rationale: full-rate recording should consume NumPy arrays directly."""
+    frame_counter: int
+    sample_count: int
+    effective_start: int
+    effective_count: int
+    flags: int
+    adc_counts: np.ndarray
+    timestamp_ns: int
+    kind: Literal["frame"] = "frame"
+    timestamp: datetime = field(default_factory=utc_now)
+
+
+DevicePacket: TypeAlias = BannerPacket | TextLinePacket | FramePacket | BinaryFramePacket
 
 
 class SpectrumFrame(BaseModel):

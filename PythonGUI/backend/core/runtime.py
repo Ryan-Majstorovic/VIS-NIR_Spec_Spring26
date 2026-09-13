@@ -113,6 +113,7 @@ def build_runtime(paths: RuntimePaths, logger: logging.Logger | None = None) -> 
         transport=transport,
         calibration_manager=calibration_manager,
         spectrum_builder=spectrum_builder,
+        binary_export_dir=paths.project_root / "exports",
         performance_monitor=performance_monitor,
         logger=resolved_logger,
     )

@@ -292,6 +292,19 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
   return result;
 }
 
+uint8_t CDC_TxReady_FS(void)
+{
+  /* USER CODE BEGIN CDC_TxReady_FS */
+  USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
+  if (hcdc == NULL)
+  {
+    return 0U;
+  }
+
+  return (hcdc->TxState == 0U) ? 1U : 0U;
+  /* USER CODE END CDC_TxReady_FS */
+}
+
 /**
   * @brief  CDC_TransmitCplt_FS
   *         Data transmitted callback

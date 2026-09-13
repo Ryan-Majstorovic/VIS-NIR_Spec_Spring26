@@ -26,6 +26,7 @@ import numpy as np
 from backend.core.runtime import AppRuntime
 from backend.models.config import (
     CalibrationConfig,
+    DEFAULT_LIVE_DISPLAY_FPS,
     DEFAULT_WAVELENGTH_COEFFICIENTS,
     DEFAULT_SPECTROGRAM_TIME_WINDOW_S,
     PixelMappingPoint,
@@ -263,6 +264,9 @@ COMMAND_CARD_HINT_TEXT = "Raw USB CDC command"
 COMMAND_CARD_SEND_BUTTON_TEXT = "Send Raw Command"
 COMMAND_CARD_EXPORT_BUTTON_TEXT = "Export Session CSV"
 COMMAND_CARD_RESET_BUTTON_TEXT = "Reset Session"
+COMMAND_CARD_START_BINARY_BUTTON_TEXT = "Start Binary Recording"
+COMMAND_CARD_STOP_BINARY_BUTTON_TEXT = "Stop Binary Recording"
+COMMAND_CARD_CONVERT_BINARY_BUTTON_TEXT = "Convert Last Binary Recording To CSV"
 
 # Spectrum card parameters.
 # Format:
@@ -1444,6 +1448,18 @@ class DesktopSpectrometerApp(App):
         session_buttons.add_widget(self._button(COMMAND_CARD_EXPORT_BUTTON_TEXT, self.export_session))
         session_buttons.add_widget(self._button(COMMAND_CARD_RESET_BUTTON_TEXT, self.reset_session))
         command_card.add_widget(session_buttons)
+        binary_buttons = BoxLayout(size_hint_y=None, height=BUTTON_HEIGHT, spacing=CARD_GAP)
+        binary_buttons.add_widget(self._button(COMMAND_CARD_START_BINARY_BUTTON_TEXT, self.start_binary_recording))
+        binary_buttons.add_widget(self._button(COMMAND_CARD_STOP_BINARY_BUTTON_TEXT, self.stop_binary_recording))
+        command_card.add_widget(binary_buttons)
+        command_card.add_widget(
+            self._button(
+                COMMAND_CARD_CONVERT_BINARY_BUTTON_TEXT,
+                self.convert_last_binary_recording_to_csv,
+                size_hint_y=None,
+                height=BUTTON_HEIGHT,
+            )
+        )
 
         # Plot card is the main live-view area for the CCD output.
         plot_card = Card()
@@ -1971,9 +1987,11 @@ class DesktopSpectrometerApp(App):
         self.refresh_ports()
         # Plot refresh is allowed to run fast; status/log refresh runs slower to
         # keep the UI responsive.
-        plot_refresh_s = min(
-            max(self.runtime.state_manager.get_user_config().ui.refresh_interval_ms / 1000.0, 0.001),
-            1.0 / MAX_PLOT_REFRESH_HZ,
+        ui_config = self.runtime.state_manager.get_user_config().ui
+        live_display_fps = max(float(getattr(ui_config, "live_display_fps", DEFAULT_LIVE_DISPLAY_FPS)), 1.0)
+        plot_refresh_s = max(
+            max(ui_config.refresh_interval_ms / 1000.0, 0.001),
+            1.0 / min(live_display_fps, MAX_PLOT_REFRESH_HZ),
         )
         status_refresh_s = max(MIN_WIDE_STATUS_REFRESH_S, plot_refresh_s * 12.0)
         Clock.schedule_interval(self.refresh_plot, plot_refresh_s)
@@ -1997,6 +2015,7 @@ class DesktopSpectrometerApp(App):
         )
         if self.runtime.transport.is_connected():
             self.runtime.command_service.disconnect()
+        self.runtime.command_service.stop_binary_recording()
 
     def refresh_ports(self, *_args) -> None:
         """Purpose: refresh the COM-port choices shown in the UI. Rationale: devices may be plugged in or removed while the app is open."""
@@ -2325,6 +2344,24 @@ class DesktopSpectrometerApp(App):
         path = self.runtime.session_manager.export_csv()
         self.runtime.command_service.refresh_session_status()
         self.set_notice(f"Exported session to {path}.")
+        self.refresh_view()
+
+    def start_binary_recording(self, *_args) -> None:
+        """Purpose: start authoritative dense binary capture. Rationale: full-rate data should go to HDF5 instead of the throttled display buffer."""
+        result = self.runtime.command_service.start_binary_recording()
+        self.set_notice(result.message)
+        self.refresh_view()
+
+    def stop_binary_recording(self, *_args) -> None:
+        """Purpose: stop authoritative dense binary capture. Rationale: flushing should be explicit before conversion."""
+        result = self.runtime.command_service.stop_binary_recording()
+        self.set_notice(result.message)
+        self.refresh_view()
+
+    def convert_last_binary_recording_to_csv(self, *_args) -> None:
+        """Purpose: convert the last HDF5 recording to CSV. Rationale: CSV export should read from stored binary arrays."""
+        result = self.runtime.command_service.convert_last_binary_recording_to_csv()
+        self.set_notice(result.message)
         self.refresh_view()
 
     def reset_session(self, *_args) -> None:
@@ -2734,9 +2771,17 @@ class DesktopSpectrometerApp(App):
                 )
 
             if self.session_label is not None:
+                recording_text = "recording=off"
+                if snapshot.recording.active:
+                    recording_text = (
+                        f"recording=on frames={snapshot.recording.frame_count} "
+                        f"queue={snapshot.recording.queue_depth}"
+                    )
+                elif snapshot.recording.failed:
+                    recording_text = f"recording=failed {snapshot.recording.error or ''}".strip()
                 self.session_label.text = (
                     f"Session {snapshot.session.session_id} | buffered={snapshot.session.frames_buffered} "
-                    f"| dropped={snapshot.session.dropped_frames}"
+                    f"| dropped={snapshot.session.dropped_frames} | {recording_text}"
                 )
 
             if self.edge_label is not None:
@@ -2869,6 +2914,7 @@ class DesktopSpectrometerApp(App):
                 self._format_plot_axis_label(sample_index, calibration_config)
                 for sample_index in x_tick_indices
             ]
+            monitor.record_value("ui.frontend_plotted_sample_count", len(display_values))
             live_graph_mode = self._current_live_graph_mode()
             spectrogram_update_due = (
                 live_graph_mode == LIVE_GRAPH_MODE_SPECTROGRAM
@@ -2915,6 +2961,7 @@ class DesktopSpectrometerApp(App):
                 if plot_signature != self._last_plot_signature:
                     self.plot.set_series(display_indices, display_values)
                     self._last_plot_signature = plot_signature
+                    monitor.record_value("ui.frontend_line_plotted_points", len(display_values))
                     monitor.increment("ui.live_spectrum_updates")
                     self._record_plot_update()
                 else:
@@ -2933,6 +2980,7 @@ class DesktopSpectrometerApp(App):
                 latest_row = spectrogram_rows[-1] if spectrogram_rows else []
                 if latest_row:
                     monitor.record_value("ui.spectrogram_visible_columns", len(latest_row))
+                    monitor.record_value("ui.frontend_spectrogram_plotted_cells", len(spectrogram_rows) * len(latest_row))
                 first_row = spectrogram_rows[0] if spectrogram_rows else []
                 spectrogram_signature = (
                     round(self._current_spectrogram_time_window_s(), 3),

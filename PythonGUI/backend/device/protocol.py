@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import struct
+import time
+from datetime import datetime, timezone
 
 import numpy as np
 
-from backend.models.frames import BannerPacket, DevicePacket, FramePacket, TextLinePacket
+from backend.models.frames import BannerPacket, BinaryFramePacket, DevicePacket, TextLinePacket
 
+# DOC-UUID: 2BD0CC64-CA9B-4886-BE5C-970D86E21283
 PACKET_MAGIC = b"CCD1"
 PACKET_VERSION = 1
 PACKET_TYPE_FRAME = 1
@@ -35,7 +38,7 @@ def encode_raw_command(command_text: str) -> bytes:
     return f"{command_text.strip()}\n".encode("ascii", errors="ignore")
 
 
-def try_parse_binary_frame(buffer: bytes) -> tuple[FramePacket | None, int]:
+def try_parse_binary_frame(buffer: bytes) -> tuple[BinaryFramePacket | None, int]:
     """Purpose: parse one binary frame from a byte buffer. Rationale: packet rebuilding needs both the parsed frame and consumed length."""
     if len(buffer) < FRAME_HEADER_STRUCT.size:
         return None, 0
@@ -71,16 +74,19 @@ def try_parse_binary_frame(buffer: bytes) -> tuple[FramePacket | None, int]:
         return None, 0
 
     payload = memoryview(buffer)[FRAME_HEADER_STRUCT.size:total_bytes]
-    adc_counts = np.frombuffer(payload, dtype="<u2", count=sample_count).tolist()
+    adc_counts = np.frombuffer(payload, dtype="<u2", count=sample_count).copy()
+    timestamp_ns = time.time_ns()
 
     return (
-        FramePacket(
+        BinaryFramePacket(
             frame_counter=frame_id,
             sample_count=sample_count,
             effective_start=effective_start,
             effective_count=effective_count,
             flags=flags,
             adc_counts=adc_counts,
+            timestamp_ns=timestamp_ns,
+            timestamp=datetime.fromtimestamp(timestamp_ns / 1_000_000_000.0, timezone.utc),
         ),
         total_bytes,
     )

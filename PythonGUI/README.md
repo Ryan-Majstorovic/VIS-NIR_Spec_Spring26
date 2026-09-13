@@ -12,6 +12,7 @@ This folder contains the desktop-side pipeline:
 - tracking connection state, recent logs, and the latest frame
 - applying the live calibration pipeline for display values
 - maintaining rolling session and spectrogram-history buffers
+- recording full-rate dense HDF5 binary captures
 - exporting captured frames to CSV
 - drawing either a live line spectrum or a rolling spectrogram
 - providing calibration, display/layout, diagnostics, and performance tools
@@ -175,6 +176,24 @@ CSV export writes both raw and derived columns:
 - `wavelength_nm`
 - `volts`
 - `processed_intensity`
+
+## Dense Binary Capture
+
+The side-panel `Session And Commands` card includes:
+
+- `Start Binary Recording`
+- `Stop Binary Recording`
+- `Convert Last Binary Recording To CSV`
+
+Binary recordings are written to `exports/spectrometer_capture_*.h5`. These HDF5 files are the full-rate capture artifact; the live graph and rolling session buffer are throttled display views.
+
+The same tools are available from the command line when running inside `PythonGUI`:
+
+```bat
+python -m backend.storage.binary_capture_cli validate exports\spectrometer_capture_YYYYMMDD_HHMMSS.h5
+python -m backend.storage.binary_capture_cli convert exports\spectrometer_capture_YYYYMMDD_HHMMSS.h5
+python -m backend.storage.binary_capture_cli benchmark --frames 1250 --sample-count 3694
+```
 
 ## Calibration Manager
 

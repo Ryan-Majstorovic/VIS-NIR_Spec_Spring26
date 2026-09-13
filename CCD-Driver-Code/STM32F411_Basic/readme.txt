@@ -4,7 +4,7 @@ STM32F411 CCD Driver Notes
 This document describes the current STM32F411_Basic firmware used by the
 VIS-NIR spectrometer project.
 
-Last aligned with the source tree on 2026-04-29.
+Last aligned with the source tree on 2026-05-22.
 
 Current Role
 ------------
@@ -165,11 +165,11 @@ The startup banner describes this as:
 Frame Buffering
 ---------------
 
-The firmware keeps three frame slots:
+The firmware keeps four frame slots:
 
 - one slot can be actively filled by ADC DMA
 - one slot can be ready for USB transmission
-- one slot can provide breathing room if USB transmission overlaps capture
+- two slots can provide breathing room if USB transmission overlaps capture
 
 If no slot is available, the firmware increments the dropped-frame counter.
 If a new capture starts while another is still active, the active capture is
@@ -178,15 +178,20 @@ aborted with the timing-fault flag.
 USB Transmission
 ----------------
 
-The main loop searches for the next ready frame slot and sends:
+The main loop searches for the next ready frame slot and sends one contiguous
+binary frame:
 
 1. the packed binary header
 2. the raw ADC sample payload
 
-Transmission is chunked into 512-byte USB CDC writes through
-`CDC_Transmit_All(...)`. Each chunk uses `CDC_Transmit_Blocking(...)` with a
-timeout. If a send fails, the firmware records a USB timeout and marks the slot
-with `CCD_FRAME_FLAG_USB_TIMEOUT`.
+The header and payload are stored next to each other in the frame slot, so the
+firmware can submit the full 7412-byte `CCD1` frame as one CDC transfer. The
+main loop waits for the CDC transmit state to return idle before releasing the
+slot. If a send or completion wait times out, the firmware records a USB
+timeout and marks the slot with `CCD_FRAME_FLAG_USB_TIMEOUT`.
+
+Frame IDs are assigned from the TIM4 ICG-cycle counter before slot acquisition.
+This means frame ID gaps on the host reflect dropped 8 ms capture opportunities.
 
 Pin Configuration Summary
 -------------------------

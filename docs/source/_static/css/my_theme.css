@@ -1,0 +1,23 @@
+/* Local docs styling overrides */
+:root {
+  --portfolio-accent: #1f6feb;
+}
+
+.wy-nav-top,
+.wy-side-nav-search {
+  background: var(--portfolio-accent);
+}
+
+/* Let main content use the full available page width */
+.wy-nav-content {
+  max-width: none;
+}
+
+/* Reusable embedded PDF frame */
+.pdf-viewer {
+  width: 100%;
+  min-height: 80vh;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #fff;
+}

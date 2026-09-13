@@ -12,6 +12,7 @@ DEFAULT_TRAILING_DUMMY_COUNT = 14
 DEFAULT_ADC_RESOLUTION_BITS = 12
 DEFAULT_ADC_REFERENCE_VOLTS = 3.3
 DEFAULT_UI_REFRESH_INTERVAL_MS = 8
+DEFAULT_LIVE_DISPLAY_FPS = 30.0
 DEFAULT_MAX_SESSION_FRAMES = 500
 DEFAULT_WAVELENGTH_COEFFICIENTS = [0.0, 1.0]
 DEFAULT_WAVELENGTH_FIT_ORDER = 3
@@ -42,6 +43,7 @@ class DeviceConfig(BaseModel):
 class UIConfig(BaseModel):
     """Purpose: store UI timing and session buffer settings. Rationale: performance-related choices should be easy to tune."""
     refresh_interval_ms: int = DEFAULT_UI_REFRESH_INTERVAL_MS
+    live_display_fps: float = DEFAULT_LIVE_DISPLAY_FPS
     max_session_frames: int = DEFAULT_MAX_SESSION_FRAMES
     live_graph_mode: Literal["spectrum", "spectrogram"] = DEFAULT_LIVE_GRAPH_MODE
     spectrogram_time_window_s: float = DEFAULT_SPECTROGRAM_TIME_WINDOW_S
