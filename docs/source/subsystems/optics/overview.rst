@@ -3,6 +3,8 @@ Optics System Overview
 
 .. _B&W Tek bench listing: https://www.ebay.com/itm/144873214016
 .. _Thorlabs GR25-1850: https://www.thorlabs.com/item/GR25-1850
+.. _Thorlabs M14L01: https://www.thorlabs.com/item/M14L01
+.. _Thorlabs ADASMA: https://www.thorlabs.com/item/ADASMA
 
 .. _uuid-45725109-9bde-4f4d-9298-123e443f1d2a:
 
@@ -100,6 +102,13 @@ test build.
      - Function
      - Location In Our Build
      - Open Items
+   * - Input fiber
+     - Delivers light from the source under test or the calibration source
+       to the entrance slit.
+     - `Thorlabs M14L01`_ patch cable (Ø50 µm core, 0.22 NA, low OH,
+       SMA-SMA, 1 m). A `Thorlabs ADASMA`_ mating sleeve joins the
+       calibration unit's fiber output to the patch cable.
+     - Fiber-to-slit mounting ``Not In Docs``.
    * - Entrance slit
      - Defines the source width presented to the spectrometer.
      - Slit mount on the front face of the housing
@@ -145,6 +154,17 @@ UUID: :ref:`C5C2B38E-2DCD-462A-A93F-D10755733D3D <uuid-c5c2b38e-2dcd-462a-a93f-d
    * - Optical bench
      - B&W Tek compact Czerny-Turner bench, used, with lid
      - `B&W Tek bench listing`_
+   * - Input fiber
+     - Multimode step-index patch cable, Ø50 µm core, 0.22 NA, low OH,
+       SMA-to-SMA, 1 m long (Thorlabs M14L01)
+     - `Thorlabs M14L01`_
+   * - Fiber mating sleeve
+     - SMA-to-SMA mating sleeve (Thorlabs ADASMA) joining the calibration
+       unit's fiber output to the input patch cable
+     - `Thorlabs ADASMA`_
+   * - Fiber NA match to the bench acceptance angle
+     - ``Not In Docs``
+     - To be determined once the mirror focal lengths are measured
    * - Grating groove density
      - 1800 lines/mm (groove spacing of approximately 555.6 nm)
      - Listing; spacing derived from groove density
@@ -222,6 +242,15 @@ optical configuration for all optical characterization and measurement.
 **Rationale:** Holding the slit, mirrors, grating, and detector port to one
 known geometry lets us attribute measured coverage, FWHM, and throughput to
 that geometry rather than to differences between rebuilds.
+
+**Requirement:** The Optics system shall accept input light through an
+SMA-terminated low-OH multimode fiber to deliver 400 nm to 1000 nm light to
+the entrance slit without OH absorption loss in the 800 nm to 1000 nm band.
+
+**Rationale:** Standard silica fiber absorbs too much light in the 800 nm to
+1000 nm band, which would weaken the long-wavelength end of the spectrum,
+where the detector and grating response are already low, and bias any
+measurement made there.
 
 **Requirement:** The Optics system shall record the slit, grating, mirror,
 filter, and detector-port configuration of the test bench with every

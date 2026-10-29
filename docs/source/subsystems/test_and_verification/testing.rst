@@ -1,6 +1,13 @@
 Testing
 =======
 
+.. note::
+
+   The matrix below is the original full-characterization plan. For the
+   Fall 2026 demonstration scope, see the proposed
+   :doc:`Demonstration Test Plan <demo_test_plan>`, which maps each TV test
+   to a kept, optional, or future-work disposition.
+
 .. _uuid-71c7dd62-9ea2-4bf0-9aae-c1470d75d33e:
 
 Master Requirement-To-Test Matrix

@@ -80,6 +80,7 @@ Related Pages
    inputs_and_outputs
    procedure
    diagnostics
+   demo_test_plan
    testing
    calculations
    validation
