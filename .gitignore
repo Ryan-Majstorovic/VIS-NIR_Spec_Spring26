@@ -1,6 +1,7 @@
 docs/build/
 docs/pages/
 docs/.doctrees/
+docs/.sphinx-deps/
 docs/source/_build/
 __pycache__/
 *.py[cod]
@@ -11,6 +12,7 @@ __pycache__/
 .agents/
 .scratch/
 .codex/
+docs/agents
 
 # Temporary work directories at any level of the repository.
 .tmp/
@@ -21,3 +23,4 @@ temp/
 .temp-*/
 tmp-*/
 temp-*/
+PythonGUI/logs

@@ -58,5 +58,11 @@ and review disposition are recorded. The requirements-linked methods and
 evidence-package rules are defined in
 :doc:`Test and Verification <subsystems/test_and_verification/index>`.
 
+**Reference:** CIE 233:2019,
+`Calibration, Characterization and Use of Array Spectroradiometers
+<https://doi.org/10.25039/TR.233.2019>`_,
+Section 5.5.3, pp. 36-37: baseline characterization, pixel-wise dark
+measurement, and verification of automatic baseline subtraction.
+
 
 

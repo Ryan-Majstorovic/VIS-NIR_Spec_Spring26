@@ -833,3 +833,60 @@ serial.serialutil.SerialException: could not open port 'COM4': FileNotFoundError
 2026-07-03 03:16:17,462 INFO kivy: Base: Leaving application in progress...
 2026-09-12 11:56:54,103 INFO kivy: GL: NPOT texture support is available
 2026-09-12 11:56:54,468 INFO kivy: Base: Start application main loop
+2026-09-17 13:44:26,673 INFO kivy: GL: NPOT texture support is available
+2026-09-17 13:44:27,151 INFO kivy: Base: Start application main loop
+2026-09-17 15:07:59,547 INFO kivy: Base: Leaving application in progress...
+2026-09-21 13:30:21,041 INFO kivy: GL: NPOT texture support is available
+2026-09-21 13:30:43,517 INFO kivy: GL: NPOT texture support is available
+2026-09-21 13:30:43,849 INFO kivy: Base: Start application main loop
+2026-09-21 13:30:47,111 INFO kivy: Base: Leaving application in progress...
+2026-09-24 14:03:52,881 INFO kivy: GL: NPOT texture support is available
+2026-09-24 14:03:53,287 INFO kivy: Base: Start application main loop
+2026-09-25 09:00:12,890 INFO kivy: Base: Leaving application in progress...
+2026-10-21 02:48:42,084 INFO kivy: GL: NPOT texture support is available
+2026-10-21 02:48:42,371 INFO kivy: Base: Start application main loop
+2026-10-21 06:57:37,030 INFO kivy: WindowSDL: Window is now on display 1
+2026-10-21 06:58:40,152 INFO kivy: WindowSDL: Window is now on display 0
+2026-10-21 12:34:23,173 INFO kivy: Base: Leaving application in progress...
+2026-10-21 12:34:23,237 WARNING kivy: stderr: Traceback (most recent call last):
+2026-10-21 12:34:23,240 WARNING kivy: stderr:   File "C:\Users\ralel\OneDrive\GitHub\VIS-NIR_Spec_Spring26\PythonGUI\desktop_app.py", line 49, in <module>
+2026-10-21 12:34:23,241 WARNING kivy: stderr:     main()
+2026-10-21 12:34:23,241 WARNING kivy: stderr:     ~~~~^^
+2026-10-21 12:34:23,241 WARNING kivy: stderr:   File "C:\Users\ralel\OneDrive\GitHub\VIS-NIR_Spec_Spring26\PythonGUI\desktop_app.py", line 45, in main
+2026-10-21 12:34:23,241 WARNING kivy: stderr:     run_desktop_app(runtime)
+2026-10-21 12:34:23,242 WARNING kivy: stderr:     ~~~~~~~~~~~~~~~^^^^^^^^^
+2026-10-21 12:34:23,242 WARNING kivy: stderr:   File "C:\Users\ralel\OneDrive\GitHub\VIS-NIR_Spec_Spring26\PythonGUI\frontend\kivy_app.py", line 3870, in run_desktop_app
+2026-10-21 12:34:23,242 WARNING kivy: stderr:     DesktopSpectrometerApp(runtime).run()
+2026-10-21 12:34:23,242 WARNING kivy: stderr:     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+2026-10-21 12:34:23,242 WARNING kivy: stderr:   File "C:\Users\ralel\OneDrive\GitHub\VIS-NIR_Spec_Spring26\PythonGUI\.venv\Lib\site-packages\kivy\app.py", line 956, in run
+2026-10-21 12:34:23,243 WARNING kivy: stderr:     runTouchApp()
+2026-10-21 12:34:23,243 WARNING kivy: stderr:     ~~~~~~~~~~~^^
+2026-10-21 12:34:23,243 WARNING kivy: stderr:   File "C:\Users\ralel\OneDrive\GitHub\VIS-NIR_Spec_Spring26\PythonGUI\.venv\Lib\site-packages\kivy\base.py", line 574, in runTouchApp
+2026-10-21 12:34:23,243 WARNING kivy: stderr:     EventLoop.mainloop()
+2026-10-21 12:34:23,244 WARNING kivy: stderr:     ~~~~~~~~~~~~~~~~~~^^
+2026-10-21 12:34:23,244 WARNING kivy: stderr:   File "C:\Users\ralel\OneDrive\GitHub\VIS-NIR_Spec_Spring26\PythonGUI\.venv\Lib\site-packages\kivy\base.py", line 341, in mainloop
+2026-10-21 12:34:23,244 WARNING kivy: stderr:     self.window.mainloop()
+2026-10-21 12:34:23,244 WARNING kivy: stderr:     ~~~~~~~~~~~~~~~~~~~~^^
+2026-10-21 12:34:23,244 WARNING kivy: stderr:   File "C:\Users\ralel\OneDrive\GitHub\VIS-NIR_Spec_Spring26\PythonGUI\.venv\Lib\site-packages\kivy\core\window\window_sdl2.py", line 714, in mainloop
+2026-10-21 12:34:23,245 WARNING kivy: stderr:     self._collide_and_dispatch_cursor_enter(x, y)
+2026-10-21 12:34:23,245 WARNING kivy: stderr:     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+2026-10-21 12:34:23,245 WARNING kivy: stderr:   File "C:\Users\ralel\OneDrive\GitHub\VIS-NIR_Spec_Spring26\PythonGUI\.venv\Lib\site-packages\kivy\core\window\window_sdl2.py", line 814, in _collide_and_dispatch_cursor_enter
+2026-10-21 12:34:23,245 WARNING kivy: stderr:     self._mouse_x, self._mouse_y = self._fix_mouse_pos(x, y)
+2026-10-21 12:34:23,246 WARNING kivy: stderr:                                    ~~~~~~~~~~~~~~~~~~~^^^^^^
+2026-10-21 12:34:23,246 WARNING kivy: stderr:   File "C:\Users\ralel\OneDrive\GitHub\VIS-NIR_Spec_Spring26\PythonGUI\.venv\Lib\site-packages\kivy\core\window\window_sdl2.py", line 544, in _fix_mouse_pos
+2026-10-21 12:34:23,246 WARNING kivy: stderr:     self.mouse_pos = (
+2026-10-21 12:34:23,246 WARNING kivy: stderr:     ^^^^^^^^^^^^^^
+2026-10-21 12:34:23,246 WARNING kivy: stderr:   File "kivy\\properties.pyx", line 520, in kivy.properties.Property.__set__
+2026-10-21 12:34:23,246 WARNING kivy: stderr:   File "kivy\\properties.pyx", line 567, in kivy.properties.Property.set
+2026-10-21 12:34:23,246 WARNING kivy: stderr:   File "kivy\\properties.pyx", line 606, in kivy.properties.Property._dispatch
+2026-10-21 12:34:23,247 WARNING kivy: stderr:   File "kivy\\_event.pyx", line 1307, in kivy._event.EventObservers.dispatch
+2026-10-21 12:34:23,247 WARNING kivy: stderr:   File "kivy\\_event.pyx", line 1213, in kivy._event.EventObservers._dispatch
+2026-10-21 12:34:23,247 WARNING kivy: stderr:   File "C:\Users\ralel\OneDrive\GitHub\VIS-NIR_Spec_Spring26\PythonGUI\.venv\Lib\site-packages\kivy\input\providers\mouse.py", line 399, in begin_or_update_hover_event
+2026-10-21 12:34:23,247 WARNING kivy: stderr:     self.create_hover(win, etype)
+2026-10-21 12:34:23,247 WARNING kivy: stderr:     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+2026-10-21 12:34:23,247 WARNING kivy: stderr:   File "C:\Users\ralel\OneDrive\GitHub\VIS-NIR_Spec_Spring26\PythonGUI\.venv\Lib\site-packages\kivy\input\providers\mouse.py", line 312, in create_hover
+2026-10-21 12:34:23,248 WARNING kivy: stderr:     nx /= win._density
+2026-10-21 12:34:23,248 WARNING kivy: stderr: ZeroDivisionError: float division by zero
+2026-10-22 15:17:21,675 INFO kivy: GL: NPOT texture support is available
+2026-10-22 15:17:21,941 INFO kivy: Base: Start application main loop
+2026-10-23 09:19:50,597 INFO kivy: Base: Leaving application in progress...
