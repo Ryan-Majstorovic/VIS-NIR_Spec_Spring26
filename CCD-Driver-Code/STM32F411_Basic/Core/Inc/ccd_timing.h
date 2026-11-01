@@ -7,14 +7,21 @@
 #define CCD_BASE_FRAME_US 8000U
 #define CCD_MAX_INTEGRATION_US 5000000U
 #define CCD_READOUT_US 7388U
-/* U1 (SN74HC04) inverts PB6 before CCD ICG; OC1REF is detector polarity. */
+/* U1 (SN74HC04) inverts PA8, PA6, and PB6 at the detector interface.
+   SH/ICG OC1REF represent detector polarity; invert their MCU outputs to cancel U1.
+   Keep the existing master-clock polarity and compensate it with the phase seed. */
+#define CCD_BOARD_INVERTS_CLOCKS 1U
+#define CCD_SH_INVERT_OUTPUT 1U
 #define CCD_ICG_INVERT_OUTPUT 1U
+#define CCD_MASTER_INVERT_OUTPUT 0U
+#define CCD_MASTER_PERIOD_TICKS 48U
+#define CCD_MASTER_HIGH_TICKS 24U
 #define CCD_MAX_SEGMENT_US 32000U
 #define CCD_MAX_SEGMENTS ((CCD_MAX_INTEGRATION_US + CCD_MAX_SEGMENT_US - 1U) / CCD_MAX_SEGMENT_US)
 #define CCD_TIMER_PRESCALER 47U /* 96 MHz / (47 + 1) = 2 MHz. */
 #define CCD_ADC_INITIAL_COUNTER 144U /* (192 - 144) / 96 MHz = first trigger after 0.5 us. */
-#define CCD_MASTER_INITIAL_COUNTER 12U /* Scope-verify propagation margin inside phiM high. */
-#define CCD_SH_HIGH_TICKS 12U /* 6 us at 2 MHz; never stretched for phase correction. */
+#define CCD_MASTER_INITIAL_COUNTER 36U /* MCU clock low -> CCD phiM high, with 125 ns phase margin. */
+#define CCD_SH_HIGH_TICKS 12U /* Detector SH-high is 6 us at 2 MHz; never stretched for phase correction. */
 
 typedef struct {
   uint32_t arr;

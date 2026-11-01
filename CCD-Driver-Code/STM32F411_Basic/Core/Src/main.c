@@ -258,7 +258,7 @@ static void StartTiming(uint32_t integration_us)
   TIM4->PSC = CCD_TIMER_PRESCALER;
   TIM3->CCMR1 = TIM_OCMODE_PWM1 | TIM_CCMR1_OC1PE;
   TIM4->CCMR1 = TIM_OCMODE_PWM2 | TIM_CCMR1_OC1PE;
-  TIM3->CCER = 0U;
+  TIM3->CCER = CCD_SH_INVERT_OUTPUT ? TIM_CCER_CC1P : 0U;
   TIM4->CCER = CCD_ICG_INVERT_OUTPUT ? TIM_CCER_CC1P : 0U;
   TIM4->CR2 = TIM_TRGO_OC1REF;
 
@@ -318,13 +318,15 @@ static void StartTiming(uint32_t integration_us)
   ArmFrameCapture();
   if (ccd_timing_fault != 0U) { StopTiming(); return; }
 
-  /* Seed phiM inside its high half-cycle; board propagation must be scoped.
-     Both APB timer clocks are 96 MHz in this clock tree. */
+  /* PA8 stays non-inverted at the timer; U1 inverts it at the CCD.
+     CNT=36 is the center of MCU-low / detector-high. Both APB timer clocks
+     are 96 MHz here. Driver propagation and trigger latency need scope checks. */
   TIM1->CR2 = TIM_TRGO_ENABLE;
   TIM1->EGR = TIM_EGR_UG;
   TIM1->CNT = CCD_MASTER_INITIAL_COUNTER;
   TIM1->SR = 0U;
-  TIM1->CCER |= TIM_CCER_CC1E;
+  TIM1->CCER = (TIM1->CCER & ~TIM_CCER_CC1P) | TIM_CCER_CC1E |
+      (CCD_MASTER_INVERT_OUTPUT ? TIM_CCER_CC1P : 0U);
   TIM1->BDTR |= TIM_BDTR_MOE;
   ccd_running = 1U;
   TIM1->CR1 |= TIM_CR1_CEN; /* Single TRGO_ENABLE edge releases both slaves. */
@@ -802,7 +804,7 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 0;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 47;
+  htim1.Init.Period = CCD_MASTER_PERIOD_TICKS - 1U;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
@@ -826,8 +828,8 @@ static void MX_TIM1_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 24;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.Pulse = CCD_MASTER_HIGH_TICKS;
+  sConfigOC.OCPolarity = CCD_MASTER_INVERT_OUTPUT ? TIM_OCPOLARITY_LOW : TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
@@ -959,7 +961,7 @@ static void MX_TIM3_Init(void)
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
   sConfigOC.Pulse = 576;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCPolarity = CCD_SH_INVERT_OUTPUT ? TIM_OCPOLARITY_LOW : TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {

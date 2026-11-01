@@ -36,7 +36,13 @@ class CompiledScheduleTests(unittest.TestCase):
 uint32_t evaluate(uint32_t us, uint32_t index, uint32_t sh, uint32_t field) {
   if (field == 0) return CcdIntegrationValid(us);
   if (field == 1) return CcdSegmentCount(us);
+  if (field == 4) return CCD_SH_INVERT_OUTPUT;
   if (field == 5) return CCD_ICG_INVERT_OUTPUT;
+  if (field == 6) return CCD_MASTER_INVERT_OUTPUT;
+  if (field == 7) return CCD_BOARD_INVERTS_CLOCKS;
+  if (field == 8) return CCD_MASTER_INITIAL_COUNTER;
+  if (field == 9) return CCD_MASTER_PERIOD_TICKS;
+  if (field == 10) return CCD_MASTER_HIGH_TICKS;
   CcdTimingSegment s = CcdSegment(us, index, sh);
   return field == 2 ? s.arr : s.ccr;
 }
@@ -85,20 +91,70 @@ uint32_t evaluate(uint32_t us, uint32_t index, uint32_t sh, uint32_t field) {
         self.assertEqual(internal_inversion, 1)
         compare = self.evaluate(8000, 0, 0, 3)
         ccd_high_ticks = 0
+        board_inversion = self.evaluate(8000, field=7)
         for counter in range(16000):
             oc_ref = int(counter >= compare)  # PWM2
             pb6 = oc_ref ^ internal_inversion
-            ccd_icg = pb6 ^ 1  # U1 74HC04
+            ccd_icg = pb6 ^ board_inversion  # U1 74HC04
             ccd_high_ticks += ccd_icg
         self.assertEqual(ccd_high_ticks, 7388 * 2)
 
-    @unittest.expectedFailure
-    def test_sh_phase_at_detector_after_driver_inversion(self):
-        # Remaining qualification issue: SH was specified at the MCU boundary.
-        # U1 inverts PA6 too; MCU SH rising is detector SH falling.
-        mcu_high_ticks = self.evaluate(8000, 0, 1, 3)
-        detector_sh_rise_us = 0.5 + mcu_high_ticks / 2
-        self.assertAlmostEqual(detector_sh_rise_us, 0.5)
+    def setUp(self):
+        self.board_inversion = self.evaluate(8000, field=7)
+
+    def detector_level(self, oc_ref, output_inversion):
+        return oc_ref ^ output_inversion ^ self.board_inversion
+
+    def test_sh_phase_and_width_at_detector_for_every_short_setting(self):
+        from backend.device.integration import SHORT_SETTINGS
+        inversion = self.evaluate(8000, field=4)
+        self.assertEqual(inversion, 1)
+        high_ticks = self.evaluate(8000, 0, 1, 3)
+        self.assertEqual(high_ticks, 12)
+        for us in SHORT_SETTINGS:
+            with self.subTest(us=us):
+                period_ticks = us * 2
+                initial_counter = period_ticks - 1
+                # Initial wrap at +0.5 us produces detector SH rising, not falling.
+                detector = [self.detector_level(int((initial_counter + tick) % period_ticks < high_ticks), inversion)
+                            for tick in range(16000 + period_ticks + 1)]
+                self.assertEqual(detector[0:2], [0, 1])
+                self.assertEqual(detector[12:14], [1, 0])
+                self.assertEqual(sum(detector[1:period_ticks + 1]), 12)
+                # At the next 8-ms ICG falling edge, the same SH phase repeats.
+                self.assertEqual(detector[16000:16002], [0, 1])
+                self.assertEqual(detector[16012:16014], [1, 0])
+
+    def test_master_clock_is_high_at_ccd_icg_rising(self):
+        inversion = self.evaluate(8000, field=6)
+        seed = self.evaluate(8000, field=8)
+        period = self.evaluate(8000, field=9)
+        high_ticks = self.evaluate(8000, field=10)
+        self.assertEqual((period, high_ticks), (48, 24))
+        detector = [self.detector_level(int((seed + tick) % period < high_ticks), inversion)
+                    for tick in range(period)]
+        self.assertEqual(sum(detector), 24)  # 250 ns high and 250 ns low at 96 MHz.
+        self.assertEqual(detector[0], 1)
+        # All physical frame/readout boundaries use integer us, hence integer phiM cycles.
+        for us in (10, 8000, 8001, 12500, 32001, 100001, 5_000_000):
+            frame_us = max(8000, us)
+            for frame in (0, 1, 1000):
+                rising_cpu_tick = (frame * frame_us + frame_us - 7388) * 96
+                counter = (seed + rising_cpu_tick) % period
+                self.assertEqual(self.detector_level(int(counter < high_ticks), inversion), 1)
+        # Nominal alignment is centered within high, not on a clock edge.
+        for offset in range(-11, 12):
+            self.assertEqual(self.detector_level(int((seed + offset) % period < high_ticks), inversion), 1)
+
+    def test_long_segments_remain_low_at_detector_when_sh_is_suppressed(self):
+        inversion = self.evaluate(8000, field=4)
+        for us in (32001, 100001, 5_000_000):
+            rows = self.rows(us, 1)
+            for arr, ccr in rows[1:]:
+                self.assertEqual(ccr, 0)
+                for counter in (0, arr):
+                    self.assertEqual(self.detector_level(int(counter < ccr), inversion), 0)
+            self.assertEqual(rows[0][1] / 2, 6)
 
     def test_preload_rotation_and_physical_edges(self):
         rng = random.Random(42)
