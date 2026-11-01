@@ -18,7 +18,12 @@ UUID: :ref:`0D68369D-1543-4EDD-BEE4-F4F57FD48BF3 <uuid-0d68369d-1543-4edd-bee4-f
 
 **Future Implementation Location:** Host PC Bias And Dark Correction boundary; implementation location to be assigned during later implementation review.
 
-**Requirements/Reference Evidence:** Requirements And Metrics.rst; Calibration And Characterization.rst
+**Requirements/Reference Evidence:** Requirements And Metrics.rst;
+Calibration And Characterization.rst; CIE 233:2019,
+`Calibration, Characterization and Use of Array Spectroradiometers
+<https://doi.org/10.25039/TR.233.2019>`_,
+Section 5.5.3, pp. 36-37, especially Sections 5.5.3.2.1 and
+5.5.3.2.2 and Note 3.
 
 **Open Decisions State:** Not In Docs
 

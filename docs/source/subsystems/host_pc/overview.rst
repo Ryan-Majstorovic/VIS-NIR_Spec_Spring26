@@ -1,10 +1,15 @@
 Host PC System Overview
 =======================
 
-.. note::
+High-Level System Overview
+--------------------------
 
-   Insert the user-provided Host PC architecture diagram here after the Visio
-   source and image are available.
+.. figure:: /_static/diagrams/host_pc/system-overview.png
+   :alt: High-level Host PC system overview showing the microcontroller USB-C
+      interface, background operations, and graphical user interface.
+   :width: 100%
+
+   High-level Host PC system overview.
 
 .. _uuid-42e97793-9f90-4eb8-9757-fde4d6527dbc:
 
