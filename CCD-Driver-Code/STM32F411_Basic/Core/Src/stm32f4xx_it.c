@@ -57,6 +57,8 @@
 /* External variables --------------------------------------------------------*/
 extern DMA_HandleTypeDef hdma_adc1;
 extern TIM_HandleTypeDef htim4;
+extern DMA_HandleTypeDef hdma_tim3_up;
+extern DMA_HandleTypeDef hdma_tim4_up;
 extern PCD_HandleTypeDef hpcd_USB_OTG_FS;
 /* USER CODE BEGIN EV */
 
@@ -245,3 +247,6 @@ void OTG_FS_IRQHandler(void)
 /* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */
+
+void DMA1_Stream2_IRQHandler(void) { HAL_DMA_IRQHandler(&hdma_tim3_up); }
+void DMA1_Stream6_IRQHandler(void) { HAL_DMA_IRQHandler(&hdma_tim4_up); }

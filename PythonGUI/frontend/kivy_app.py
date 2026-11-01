@@ -23,6 +23,8 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 import numpy as np
 
+from decimal import Decimal, InvalidOperation
+from backend.device.integration import UNIT_US, adjacent_settings, parse_duration, frame_interval_us
 from backend.core.runtime import AppRuntime
 from backend.models.config import (
     CalibrationConfig,
@@ -1164,6 +1166,9 @@ class DesktopSpectrometerApp(App):
         self.port_spinner: Spinner | None = None
         self.display_toggle_button: Button | None = None
         self.command_input: TextInput | None = None
+        self.integration_input = None
+        self.integration_unit = None
+        self.integration_status = None
         self.wavelength_input: TextInput | None = None
         self.wavelength_fit_order_input: TextInput | None = None
         self.normalization_mode_spinner: Spinner | None = None
@@ -1172,6 +1177,7 @@ class DesktopSpectrometerApp(App):
         self.bias_capture_count_input: TextInput | None = None
         self.bias_vector_input: TextInput | None = None
         self.dark_vector_input: TextInput | None = None
+        self.dark_integration_input = None
         self.flat_field_input: TextInput | None = None
         self.qe_points_input: TextInput | None = None
         self.qe_normalization_input: TextInput | None = None
@@ -1426,6 +1432,21 @@ class DesktopSpectrometerApp(App):
         self._command_card = command_card
         self._side_panel_cards.append(command_card)
         command_card.add_widget(self._section_title(COMMAND_CARD_TITLE_TEXT))
+        command_card.add_widget(self._section_title("Integration time"))
+        exposure_row = BoxLayout(size_hint_y=None, height=CONTROL_HEIGHT, spacing=CARD_GAP)
+        self.integration_input = TextInput(text="10", multiline=False)
+        self._configure_text_input(self.integration_input)
+        self.integration_unit = Spinner(text="µs", values=("µs", "ms", "s"), size_hint_x=0.35)
+        exposure_row.add_widget(self.integration_input)
+        exposure_row.add_widget(self.integration_unit)
+        command_card.add_widget(exposure_row)
+        exposure_buttons = BoxLayout(size_hint_y=None, height=BUTTON_HEIGHT, spacing=CARD_GAP)
+        exposure_buttons.add_widget(self._button("-", lambda *_: self.step_integration(-1)))
+        exposure_buttons.add_widget(self._button("+", lambda *_: self.step_integration(1)))
+        exposure_buttons.add_widget(self._button("Apply", self.apply_integration))
+        command_card.add_widget(exposure_buttons)
+        self.integration_status = self._small_label("Waiting for device timing metadata.")
+        command_card.add_widget(self.integration_status)
         self.command_input = TextInput(
             text="",
             multiline=False,
@@ -1670,6 +1691,12 @@ class DesktopSpectrometerApp(App):
             CALIBRATION_DARK_SUMMARY_TEMPLATE.format(count=len(calibration_config.dark_offset_counts))
         )
         calibration_bias_card.add_widget(self.dark_summary_label)
+        self.dark_integration_input = TextInput(
+            text=str(calibration_config.dark_integration_us or ""), multiline=False,
+            hint_text="Dark reference integration (µs; required for stored dark correction)",
+            size_hint_y=None, height=CONTROL_HEIGHT)
+        self._configure_text_input(self.dark_integration_input)
+        calibration_bias_card.add_widget(self.dark_integration_input)
         self.dark_vector_input = TextInput(
             text=self._format_float_vector(calibration_config.dark_offset_counts),
             multiline=True,
@@ -2307,6 +2334,8 @@ class DesktopSpectrometerApp(App):
             bias_capture_frame_count = int(self.bias_capture_count_input.text.strip() or "1")
             bias_counts = self._parse_float_vector(self.bias_vector_input.text)
             dark_counts = self._parse_float_vector(self.dark_vector_input.text)
+            dark_us = (parse_duration(self.dark_integration_input.text, "µs")
+                       if self.dark_integration_input.text.strip() else None)
             flat_field = self._parse_float_vector(self.flat_field_input.text)
             mapping_points = self._parse_mapping_points(self.pixel_mapping_input.text)
             qe_points = self._parse_response_points(self.qe_points_input.text)
@@ -2315,7 +2344,7 @@ class DesktopSpectrometerApp(App):
                 if self.qe_normalization_input.text.strip()
                 else None
             )
-        except ValueError:
+        except (ValueError, InvalidOperation):
             self.set_notice("One or more calibration entries could not be parsed. Check the coefficients, vectors, and point tables.")
             return None
 
@@ -2334,6 +2363,7 @@ class DesktopSpectrometerApp(App):
             bias_capture_frame_count=max(bias_capture_frame_count, 1),
             bias_counts=bias_counts,
             dark_offset_counts=dark_counts,
+            dark_integration_us=dark_us,
             intensity_correction=flat_field,
             quantum_efficiency_points=qe_points,
             quantum_efficiency_normalization_wavelength_nm=qe_normalization,
@@ -2370,6 +2400,27 @@ class DesktopSpectrometerApp(App):
         self.runtime.command_service.refresh_session_status()
         self.set_notice("Session buffer cleared.")
         self.refresh_view()
+
+    def step_integration(self, direction: int) -> None:
+        try:
+            us = Decimal(self.integration_input.text) * UNIT_US[self.integration_unit.text]
+            if not us.is_finite():
+                raise ValueError("Enter a finite integration time.")
+            neighbors = adjacent_settings(us)
+            selected = neighbors[0 if direction < 0 else 1]
+            if selected is not None:
+                self.integration_input.text = str(Decimal(selected) / UNIT_US[self.integration_unit.text])
+        except (ValueError, InvalidOperation):
+            self.set_notice("Enter a numeric integration time before stepping.")
+
+    def apply_integration(self, *_args) -> None:
+        try:
+            us = parse_duration(self.integration_input.text, self.integration_unit.text)
+        except (ValueError, InvalidOperation) as exc:
+            self.set_notice(str(exc))
+            return
+        result = self.runtime.command_service.integration.request(us)
+        self.set_notice(result.message)
 
     def send_raw_command(self, *_args) -> None:
         """Purpose: send a raw command string to the device. Rationale: advanced control and debugging should be available from the UI."""
@@ -2750,6 +2801,12 @@ class DesktopSpectrometerApp(App):
         with monitor.measure("ui.refresh_status"):
             monitor.increment("ui.refresh_status_calls")
             snapshot = self.runtime.state_manager.snapshot(include_spectrum=False)
+            if self.integration_status is not None:
+                us = snapshot.device.integration_us
+                rate = f"{1_000_000 / frame_interval_us(us):.6g} Hz" if us else "unknown rate"
+                self.integration_status.text = (
+                    f"{snapshot.device.integration_state}: {us if us is not None else 'unknown'} µs, {rate}\n"
+                    f"{snapshot.device.integration_message}")
 
             # Connection and firmware banner fields summarize the device state.
             if self.status_label is not None:

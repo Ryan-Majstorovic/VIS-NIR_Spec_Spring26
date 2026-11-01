@@ -33,6 +33,7 @@ def _build_synthetic_packet_bytes(frame_id: int, adc_counts: np.ndarray) -> byte
         max(int(adc_counts.size) - 46, 0),
         0x0001,
         len(payload),
+        10,
     )
     return header + payload
 

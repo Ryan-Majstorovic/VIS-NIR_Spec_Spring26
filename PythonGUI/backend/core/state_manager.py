@@ -103,6 +103,9 @@ class StateManager:
         """Purpose: clear frame-specific live state. Rationale: reconnects should not reuse stale frame counters or spectra."""
         with self._lock:
             self._device_status.frame_counter = 0
+            self._device_status.integration_us = None
+            self._device_status.integration_state = "Unknown"
+            self._device_status.requested_integration_us = None
             self._device_status.sample_count = self._user_config.device.sample_count
             self._device_status.effective_start_index = self._user_config.device.effective_start_index
             self._device_status.effective_sample_count = self._user_config.device.effective_sample_count
@@ -121,6 +124,7 @@ class StateManager:
         with self._lock:
             self._device_status.last_seen = frame.timestamp
             self._device_status.frame_counter = frame.frame_counter
+            self._device_status.integration_us = frame.integration_us
             self._device_status.sample_count = frame.sample_count
             self._device_status.effective_start_index = frame.effective_start
             self._device_status.effective_sample_count = frame.effective_count
@@ -128,6 +132,12 @@ class StateManager:
             self._device_status.missed_frames += missed_frames
             self._device_status.sample_preview = [int(value) for value in preview]
             self._device_status.last_message = f"Frame {frame.frame_counter} received."
+
+    def set_integration_status(self, state: str, message: str, requested_us: int | None = None) -> None:
+        with self._lock:
+            self._device_status.integration_state = state
+            self._device_status.integration_message = message
+            self._device_status.requested_integration_us = requested_us
 
     def set_last_spectrum(self, frame: SpectrumFrame) -> None:
         """Purpose: store the newest spectrum frame. Rationale: the plot should always have a single latest frame to display."""

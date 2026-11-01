@@ -32,6 +32,8 @@ def export_spectra_csv(
                 "effective_start_index",
                 "effective_sample_count",
                 "frame_flags",
+                "integration_us",
+                "dark_calibration_applied",
                 "sample_index",
                 "wavelength_nm",
                 "raw_adc_count",
@@ -65,6 +67,7 @@ def export_spectra_csv(
                     export_dark_reference_count,
                 ) = spectrum_builder.build_export_columns(
                     adc_counts=frame.adc_counts,
+                    integration_us=frame.integration_us,
                 )
                 processed_counts = export_processed_counts.tolist()
                 wavelengths = export_wavelengths.tolist()
@@ -82,6 +85,8 @@ def export_spectra_csv(
                         frame.effective_start_index,
                         frame.effective_sample_count,
                         frame.frame_flags,
+                        frame.integration_us if frame.integration_us is not None else "",
+                        frame.dark_calibration_applied,
                         frame.sample_indices[index] if index < len(frame.sample_indices) else index,
                         wavelengths[index] if index < len(wavelengths) else "",
                         frame.adc_counts[index] if index < len(frame.adc_counts) else "",

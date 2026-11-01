@@ -8,6 +8,7 @@ import queue
 import threading
 from time import perf_counter
 
+from backend.core.integration_control import IntegrationControl
 from backend.core.performance_monitor import PerformanceMonitor
 from backend.core.session_manager import SessionManager
 from backend.core.state_manager import StateManager
@@ -43,6 +44,7 @@ class CommandService:
         self._state_manager = state_manager
         self._session_manager = session_manager
         self._transport = transport
+        self.integration = IntegrationControl(transport, state_manager)
         self._calibration_manager = calibration_manager
         self._spectrum_builder = spectrum_builder
         self._binary_export_dir = binary_export_dir
@@ -82,6 +84,7 @@ class CommandService:
         """Purpose: open the device connection. Rationale: connect logic must reset parser state and update app status consistently."""
         config = self._state_manager.get_user_config()
         selected_port = port or config.serial.port
+        self.integration.reset()
         self._packet_reader.reset()
         self._clear_pending_bytes()
         self._last_frame_id = None
@@ -128,6 +131,7 @@ class CommandService:
         if self._binary_recorder is not None and self._binary_recorder.status()["active"]:
             self.stop_binary_recording()
         self._transport.disconnect()
+        self.integration.reset()
         self._packet_reader.reset()
         self._clear_pending_bytes()
         self._last_frame_id = None
@@ -152,6 +156,11 @@ class CommandService:
         if not self._transport.is_connected():
             return CommandResult(ok=False, message="Device is not connected.")
 
+        if cleaned.split()[0].upper() == "INTEG":
+            fields = cleaned.split()
+            if len(fields) != 2 or not fields[1].isascii() or not fields[1].isdigit():
+                return CommandResult(ok=False, message="Use INTEG <integer microseconds>.")
+            return self.integration.request(int(fields[1]))
         self._transport.write(encode_raw_command(cleaned))
         self._state_manager.append_log(f"TX > {cleaned}")
         return CommandResult(
@@ -341,6 +350,7 @@ class CommandService:
     def _handle_transport_state(self, state: ConnectionState, detail: str | None) -> None:
         """Purpose: mirror transport state changes into app state. Rationale: the UI should react to connection events consistently."""
         if state == ConnectionState.error:
+            self.integration.reset()
             self._state_manager.set_connection_state(
                 ConnectionState.error,
                 error=detail,
@@ -349,6 +359,9 @@ class CommandService:
             if detail:
                 self._state_manager.append_log(f"Transport error: {detail}")
             return
+
+        if state in (ConnectionState.error, ConnectionState.disconnected):
+            self.integration.reset()
 
         if state == ConnectionState.disconnected:
             self._last_frame_id = None
@@ -413,10 +426,15 @@ class CommandService:
             return
 
         if isinstance(packet, TextLinePacket):
+            self.integration.receive_text(packet.text)
             self._state_manager.append_log(packet.text)
             return
 
         if isinstance(packet, BinaryFramePacket):
+            self.integration.receive_frame(packet)
+            if packet.flags & 2:
+                self._state_manager.append_log("Rejected frame with timing fault.")
+                return
             monitor = self._performance_monitor
             with (
                 monitor.measure("backend.frame_process")

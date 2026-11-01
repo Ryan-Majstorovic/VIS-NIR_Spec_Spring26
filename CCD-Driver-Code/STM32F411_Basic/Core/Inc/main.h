@@ -55,6 +55,7 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
+void CCD_ReceiveCommandBytes(const uint8_t *bytes, uint32_t length);
 
 /* USER CODE END EFP */
 

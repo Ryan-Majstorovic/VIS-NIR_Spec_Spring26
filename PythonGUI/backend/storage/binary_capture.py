@@ -27,13 +27,15 @@ except ImportError:  # pragma: no cover - exercised only on machines missing the
     h5py = None
 
 
-FORMAT_VERSION = "dense-hdf5-v1"
+FORMAT_VERSION = "dense-hdf5-v2"
 DEFAULT_CHUNK_FRAMES = 128
 DEFAULT_QUEUE_CHUNKS = 4
 CSV_FLOAT_FORMAT = ".8g"
 CSV_COLUMNS = [
     "frame_id",
     "timestamp_ns",
+    "integration_us",
+    "dark_calibration_applied",
     "sample_index",
     "wavelength_nm",
     "raw_adc_count",
@@ -65,6 +67,8 @@ class DenseFrameRecord:
     processed_intensity: np.ndarray
     frame_dark_reference_count: np.ndarray
     automatic_dark_bias_applied: np.ndarray
+    integration_us: int | None = None
+    dark_calibration_applied: bool = False
 
 
 def require_h5py() -> Any:
@@ -200,6 +204,11 @@ class DenseFrameProcessor:
         raw_u16 = np.asarray(frame.adc_counts, dtype=np.uint16)
         raw_counts = raw_u16.astype(np.float64, copy=False)
         bias_corrected_raw = raw_counts - self.bias_vector
+        dark_applied = bool(self.calibration_config.apply_dark_subtraction and
+                            self.calibration_config.dark_offset_counts and
+                            frame.integration_us is not None and
+                            frame.integration_us == self.calibration_config.dark_integration_us)
+        dark_vector = self.dark_offset_vector if dark_applied else np.zeros(self.pixel_count)
 
         frame_dark_reference = 0.0
         if self.calibration_config.apply_dark_subtraction:
@@ -212,10 +221,10 @@ class DenseFrameProcessor:
         # With dark subtraction enabled the light estimate is beta_f - (R_p - B_p - D_p).
         # Without it, the same polarity becomes full_scale - (R_p - B_p).
         if self.calibration_config.apply_dark_subtraction:
-            dark_corrected_raw = bias_corrected_raw - self.dark_offset_vector
+            dark_corrected_raw = bias_corrected_raw - dark_vector
             light_counts = np.maximum(frame_dark_reference - dark_corrected_raw, LIVE_DISPLAY_CLIP_MIN)
             saturated_bias_corrected_raw = -self.bias_vector
-            saturated_dark_corrected_raw = saturated_bias_corrected_raw - self.dark_offset_vector
+            saturated_dark_corrected_raw = saturated_bias_corrected_raw - dark_vector
             saturation_light_counts = np.maximum(
                 frame_dark_reference - saturated_dark_corrected_raw,
                 MIN_NORMALIZATION_DENOMINATOR,
@@ -252,7 +261,9 @@ class DenseFrameProcessor:
             volts=volts.astype(np.float32),
             processed_intensity=intensity.astype(np.float32),
             frame_dark_reference_count=np.full(self.pixel_count, frame_dark_reference, dtype=np.float32),
-            automatic_dark_bias_applied=self._applied_bias_vector.astype(np.float32),
+            automatic_dark_bias_applied=(self.bias_vector + dark_vector).astype(np.float32),
+            integration_us=frame.integration_us,
+            dark_calibration_applied=dark_applied,
         )
 
 
@@ -377,6 +388,8 @@ class DenseBinaryRecorder:
         dense_chunks = (self.chunk_frames, pixel_count)
         return {
             "frame_id": frame_group.create_dataset("frame_id", shape=(0,), maxshape=(None,), chunks=frame_chunks, dtype=np.uint64),
+            "integration_us": frame_group.create_dataset("integration_us", shape=(0,), maxshape=(None,), chunks=frame_chunks, dtype=np.uint32),
+            "dark_calibration_applied": frame_group.create_dataset("dark_calibration_applied", shape=(0,), maxshape=(None,), chunks=frame_chunks, dtype=np.bool_),
             "timestamp_ns": frame_group.create_dataset("timestamp_ns", shape=(0,), maxshape=(None,), chunks=frame_chunks, dtype=np.int64),
             "raw_adc_count": raw_group.create_dataset("adc_count", shape=(0, pixel_count), maxshape=(None, pixel_count), chunks=dense_chunks, dtype=np.uint16),
             "processed_adc_count": processed_group.create_dataset("adc_count", shape=(0, pixel_count), maxshape=(None, pixel_count), chunks=dense_chunks, dtype=np.float32),
@@ -402,6 +415,8 @@ class DenseBinaryRecorder:
                 dataset.resize((stop, dataset.shape[1]))
 
         datasets["frame_id"][start:stop] = np.asarray([record.frame_id for record in records], dtype=np.uint64)
+        datasets["integration_us"][start:stop] = np.asarray([record.integration_us or 0 for record in records], dtype=np.uint32)
+        datasets["dark_calibration_applied"][start:stop] = [record.dark_calibration_applied for record in records]
         datasets["timestamp_ns"][start:stop] = np.asarray([record.timestamp_ns for record in records], dtype=np.int64)
         datasets["raw_adc_count"][start:stop, :] = np.stack([record.raw_adc_count for record in records])
         datasets["processed_adc_count"][start:stop, :] = np.stack([record.processed_adc_count for record in records])
@@ -440,6 +455,10 @@ def export_hdf5_to_csv(hdf5_path: Path, csv_path: Path | None = None, *, chunk_f
             stop = min(start + max(int(chunk_frames), 1), total_frames)
             frame_id_chunk = frame_ids[start:stop]
             timestamp_chunk = timestamp_ns[start:stop]
+            integration_chunk = (handle["frame/integration_us"][start:stop]
+                                 if "frame/integration_us" in handle else np.zeros(stop - start, dtype=np.uint32))
+            dark_applied_chunk = (handle["frame/dark_calibration_applied"][start:stop]
+                                  if "frame/dark_calibration_applied" in handle else None)
             raw_chunk = raw_adc[start:stop, :]
             processed_chunk = processed_adc[start:stop, :]
             volts_chunk = volts[start:stop, :]
@@ -455,6 +474,8 @@ def export_hdf5_to_csv(hdf5_path: Path, csv_path: Path | None = None, *, chunk_f
                         [
                             int(frame_id_chunk[frame_offset]),
                             int(timestamp_chunk[frame_offset]),
+                            int(integration_chunk[frame_offset]) or "",
+                            bool(dark_applied_chunk[frame_offset]) if dark_applied_chunk is not None else "",
                             int(sample_indices[pixel_index]),
                             format(float(wavelengths_nm[pixel_index]), CSV_FLOAT_FORMAT),
                             int(raw_chunk[frame_offset, pixel_index]),

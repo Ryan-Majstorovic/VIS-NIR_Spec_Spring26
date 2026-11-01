@@ -58,7 +58,7 @@ class SpectrumBuilder:
                 _volts,
                 dark_reference,
                 saturation_reference_counts,
-            ) = self._build_processed_columns(frame.adc_counts)
+            ) = self._build_processed_columns(frame.adc_counts, integration_us=frame.integration_us)
             raw_adc_counts = (
                 frame.adc_counts.tolist()
                 if hasattr(frame.adc_counts, "tolist")
@@ -82,6 +82,8 @@ class SpectrumBuilder:
                 effective_start_index=frame.effective_start,
                 effective_sample_count=frame.effective_count,
                 frame_flags=frame.flags,
+                integration_us=frame.integration_us,
+                dark_calibration_applied=self._dark_matches(frame.integration_us),
                 adc_counts=[int(value) for value in raw_adc_counts],
                 live_display_counts=display_counts.tolist(),
                 spectrogram_row=spectrogram_row,
@@ -107,7 +109,7 @@ class SpectrumBuilder:
                 _volts,
                 dark_reference,
                 saturation_reference_counts,
-            ) = self._build_processed_columns(frame.adc_counts)
+            ) = self._build_processed_columns(frame.adc_counts, integration_us=frame.integration_us)
             spectrogram_values = self._normalize_spectrogram_signal(
                 processed_counts,
                 saturation_reference_counts=saturation_reference_counts,
@@ -121,12 +123,14 @@ class SpectrumBuilder:
                 effective_sample_count=frame.effective_sample_count,
             )
             updated.dark_reference_count = dark_reference
+            updated.dark_calibration_applied = self._dark_matches(frame.integration_us)
             return updated
 
     def build_export_columns(
         self,
         *,
         adc_counts: Sequence[int],
+        integration_us: int | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
         """Purpose: compute export-time wavelength and intensity columns. Rationale: heavy derived data should be delayed until it is actually needed."""
         (
@@ -136,7 +140,7 @@ class SpectrumBuilder:
             volts,
             frame_dark_level,
             _saturation_reference_counts,
-        ) = self._build_processed_columns(adc_counts)
+        ) = self._build_processed_columns(adc_counts, integration_us=integration_us)
         return corrected_counts, wavelengths, volts, normalized_counts, frame_dark_level
 
     def _build_processed_counts(
@@ -162,9 +166,15 @@ class SpectrumBuilder:
         _processed_counts, normalized_counts, frame_dark_level = self._build_processed_counts(adc_counts)
         return normalized_counts, frame_dark_level
 
+    def _dark_matches(self, integration_us: int | None) -> bool:
+        config = self._calibration_manager.config
+        return bool(config.apply_dark_subtraction and config.dark_offset_counts and
+                    integration_us is not None and config.dark_integration_us == integration_us)
+
     def _build_processed_columns(
         self,
         adc_counts: Sequence[int],
+        *, integration_us: int | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, np.ndarray]:
         """Purpose: run the calibration pipeline through corrected counts, wavelength assignment, and final normalization. Rationale: both the live plot and CSV export should use the same ordered processing steps."""
         monitor = self._performance_monitor
@@ -206,14 +216,14 @@ class SpectrumBuilder:
                 frame_dark_level=frame_dark_level,
                 full_scale_count=full_scale_count,
                 apply_dark_subtraction_enabled=calibration_config.apply_dark_subtraction,
-                dark_offset_counts=calibration_config.dark_offset_counts,
+                dark_offset_counts=calibration_config.dark_offset_counts if self._dark_matches(integration_us) else [],
             )
             saturation_light_counts = self._light_counts_from_bias_corrected_raw(
                 saturated_bias_corrected_raw,
                 frame_dark_level=frame_dark_level,
                 full_scale_count=full_scale_count,
                 apply_dark_subtraction_enabled=calibration_config.apply_dark_subtraction,
-                dark_offset_counts=calibration_config.dark_offset_counts,
+                dark_offset_counts=calibration_config.dark_offset_counts if self._dark_matches(integration_us) else [],
             )
 
             wavelengths = self._wavelengths_for_sample_count(len(raw_counts))

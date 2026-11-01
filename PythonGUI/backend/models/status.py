@@ -30,6 +30,10 @@ class DeviceStatus(BaseModel):
     last_message: str | None = None
     last_error: str | None = None
     frame_counter: int = 0
+    integration_us: int | None = None
+    requested_integration_us: int | None = None
+    integration_state: str = "Unknown"
+    integration_message: str = "Waiting for device timing metadata."
     sample_count: int = 0
     effective_start_index: int = 32
     effective_sample_count: int = 3648
