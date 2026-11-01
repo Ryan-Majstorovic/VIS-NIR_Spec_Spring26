@@ -36,6 +36,7 @@ class CompiledScheduleTests(unittest.TestCase):
 uint32_t evaluate(uint32_t us, uint32_t index, uint32_t sh, uint32_t field) {
   if (field == 0) return CcdIntegrationValid(us);
   if (field == 1) return CcdSegmentCount(us);
+  if (field == 5) return CCD_ICG_INVERT_OUTPUT;
   CcdTimingSegment s = CcdSegment(us, index, sh);
   return field == 2 ? s.arr : s.ccr;
 }
@@ -79,13 +80,25 @@ uint32_t evaluate(uint32_t us, uint32_t index, uint32_t sh, uint32_t field) {
         for us in list(range(8002)) + [10000, 12500, 32001, 100001, 5_000_000, 5_000_001]:
             self.assertEqual(bool(self.evaluate(us)), valid_integration(us))
 
+    def test_icg_preserves_high_time_after_driver_inversion(self):
+        internal_inversion = self.evaluate(8000, field=5)
+        self.assertEqual(internal_inversion, 1)
+        compare = self.evaluate(8000, 0, 0, 3)
+        ccd_high_ticks = 0
+        for counter in range(16000):
+            oc_ref = int(counter >= compare)  # PWM2
+            pb6 = oc_ref ^ internal_inversion
+            ccd_icg = pb6 ^ 1  # U1 74HC04
+            ccd_high_ticks += ccd_icg
+        self.assertEqual(ccd_high_ticks, 7388 * 2)
+
     @unittest.expectedFailure
-    def test_icg_rising_follows_completed_sh_pulse(self):
-        # Known conflict in the approved constants, awaiting a waveform decision.
-        # ICG rises at 612 us; the 10-us SH train is high from 610.5 to 616.5 us.
-        icg_rising_ticks = self.evaluate(8000, 0, 0, 3)
-        sh_phase_ticks = (icg_rising_ticks - 1) % 20
-        self.assertGreaterEqual(sh_phase_ticks, 12 + 2)  # SH-high 6 us plus t1 >= 1 us.
+    def test_sh_phase_at_detector_after_driver_inversion(self):
+        # Remaining qualification issue: SH was specified at the MCU boundary.
+        # U1 inverts PA6 too; MCU SH rising is detector SH falling.
+        mcu_high_ticks = self.evaluate(8000, 0, 1, 3)
+        detector_sh_rise_us = 0.5 + mcu_high_ticks / 2
+        self.assertAlmostEqual(detector_sh_rise_us, 0.5)
 
     def test_preload_rotation_and_physical_edges(self):
         rng = random.Random(42)

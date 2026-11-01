@@ -259,7 +259,7 @@ static void StartTiming(uint32_t integration_us)
   TIM3->CCMR1 = TIM_OCMODE_PWM1 | TIM_CCMR1_OC1PE;
   TIM4->CCMR1 = TIM_OCMODE_PWM2 | TIM_CCMR1_OC1PE;
   TIM3->CCER = 0U;
-  TIM4->CCER = 0U;
+  TIM4->CCER = CCD_ICG_INVERT_OUTPUT ? TIM_CCER_CC1P : 0U;
   TIM4->CR2 = TIM_TRGO_OC1REF;
 
   CcdTimingSegment first_sh, first_icg;
@@ -306,7 +306,7 @@ static void StartTiming(uint32_t integration_us)
   slave.InputTrigger = TIM_TS_ITR0; /* Both independent outputs start from TIM1. */
   if (HAL_TIM_SlaveConfigSynchro(&htim3, &slave) != HAL_OK ||
       HAL_TIM_SlaveConfigSynchro(&htim4, &slave) != HAL_OK) ccd_timing_fault = 1U;
-  slave.InputTrigger = TIM_TS_ITR3; /* TIM4 OC1REF rising is physical ICG readout start. */
+  slave.InputTrigger = TIM_TS_ITR3; /* TIM4 OC1REF rising is CCD ICG rising after U1 inversion. */
   if (HAL_TIM_SlaveConfigSynchro(&htim2, &slave) != HAL_OK) ccd_timing_fault = 1U;
   TIM2->CCER |= TIM_CCER_CC1E;
   TIM3->SR = 0U;
@@ -1019,7 +1019,7 @@ static void MX_TIM4_Init(void)
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM2;
   sConfigOC.Pulse = 7388;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCPolarity = CCD_ICG_INVERT_OUTPUT ? TIM_OCPOLARITY_LOW : TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
