@@ -1,10 +1,12 @@
 Embedded System Overview
 ========================
 
-.. note::
+.. figure:: /_static/diagrams/embedded/system-overview.png
+   :alt: High-level Embedded system architecture showing the TCD1304DG sensor boundary, STM32F411 microcontroller timing and digitization subsystems, and host PC USB CDC transport interface.
+   :width: 85%
+   :align: center
 
-   Insert the user-provided Embedded architecture diagram here after the Visio
-   source and image are available.
+   High-level Embedded system architecture and real-time execution model.
 
 .. _uuid-dd4f5c01-b4f1-4809-ad9e-68b3059bebeb:
 
@@ -13,114 +15,66 @@ System Role
 
 UUID: :ref:`DD4F5C01-B4F1-4809-AD9E-68B3059BEBEB <uuid-dd4f5c01-b4f1-4809-ad9e-68b3059bebeb>`
 
-**Summary:** The Embedded system shall coordinate detector control, timing,
-digitization, frame formation, the driver-board interface, and USB CDC transfer
-to convert the TCD1304DG analog output into complete measurement frames for the
-Host PC system.
-
-**Expected Outcome:** The Embedded system shall provide complete frames that
-preserve all 3648 effective detector samples in acquisition order and include
-the identity and status needed at the Integration boundary.
-
-**Rationale:** Coordinating these functions within one subsystem preserves the
-timing relationship between detector readout, sample acquisition, frame
-completion, and transfer so the host does not receive data whose acquisition
-state is ambiguous.
+The Embedded system manages the hardware-level control, precision optical timing, analog digitization, and wire packetization for the VIS-NIR spectrometer. It executes bare-metal C firmware on an STM32F411CEU6 microcontroller to drive the Toshiba TCD1304DG linear CCD sensor, digitize detector pixel voltages with minimal jitter, and stream complete 3694-sample measurement frames to the Host PC over USB CDC at cadences up to 125 Hz.
 
 .. _uuid-b5095b6c-c6fd-4966-9685-ae6966ceda21:
 
-System Objectives
------------------
+System Architecture & Real-Time Execution Model
+-----------------------------------------------
 
 UUID: :ref:`B5095B6C-C6FD-4966-9685-AE6966CEDA21 <uuid-b5095b6c-c6fd-4966-9685-ae6966ceda21>`
 
-**Objective 1:** **Timing and acquisition.** The Embedded system shall generate
-the fM, SH, ICG, and ADC-trigger signals and preserve all 3648 effective
-detector samples in acquisition order.
+The embedded architecture is organized into synchronized functional layers to ensure microsecond timing determinism and zero frame loss:
 
-**Rationale:** Stable timing and ordered sampling preserve the relationship
-between detector position and measured signal.
-
-**Objective 2:** **Transport and control.** The Embedded system shall transfer
-each complete frame with its frame identity and status over USB CDC and process
-start, stop, and integration-time requests through the Integration interface.
-
-**Rationale:** A defined transport and control boundary prevents partial frames
-or unresolved commands from being treated as completed measurements.
-
-**Objective 3:** **Verification evidence.** The Embedded system shall produce
-requirements-linked test records for detector timing, frame acquisition, USB
-transfer, control handling, and driver-board operation.
-
-**Rationale:** Requirements-linked records make failures traceable to the
-Embedded function that produced them.
+1. **Precision Waveform Generation (Timers TIM1, TIM2, TIM3, TIM4):** Generates the continuous 2.0 MHz master clock (fM), electronic shutter shift gate (SH), frame integration clear gate (ICG), and synchronized ADC conversion triggers across exposure times from 10 us to 5 s.
+2. **Direct Memory Access (DMA) Acquisition:** Couples ADC1 conversions directly to a circular 4-slot SRAM buffer pool via DMA, ensuring that all 3694 detector line samples are preserved in exact spatial order without CPU intervention.
+3. **Command Processing & State Management:** Ingests ASCII command tokens over USB CDC, enforces valid exposure intervals (exact integer divisors of 8000 us for exposures at or below 8 ms), and reloads hardware timer schedules synchronously at physical frame boundaries.
+4. **Wire Transport & CDC Stream Packetization:** Packages digitized sample arrays into 7416-byte binary packets (28-byte little-endian header with magic ``CCD1``, protocol version 2) and transmits frames over USB Full-Speed endpoints while multiplexing ASCII diagnostics.
+5. **Hardware Calibration & Verification:** Provides benchtop oscilloscope procedures and automated regression suites to qualify waveform timing, spatial pixel geometry, and long-duration capture continuity.
 
 .. _uuid-8e892af2-4ec5-40ac-922b-4e1dce44264a:
 
-System Relationship
--------------------
+Subsystem Relationships
+-----------------------
 
 UUID: :ref:`8E892AF2-4EC5-40AC-922B-4E1DCE44264A <uuid-8e892af2-4ec5-40ac-922b-4e1dce44264a>`
 
 .. list-table::
    :header-rows: 1
 
-   * - System
-     - Primary Responsibility
-     - Downstream Or Adjacent Relationship
-   * - Controller
-     - The Embedded controller system shall coordinate timing, acquisition, frame ownership, and supported host-control application.
-     - The Embedded controller system shall keep control requests and frame ownership coordinated throughout each capture.
-   * - Timers
-     - The Embedded timer system shall generate the required fM, SH, ICG, and ADC-trigger timing at the detector and acquisition boundaries.
-     - The Embedded timer system shall provide repeatable timing relationships for detector charge transfer and ADC sampling.
-   * - Acquisition
-     - The Embedded acquisition system shall digitize the detector output and form complete measurement frames containing all 3648 effective pixels.
-     - The Embedded acquisition system shall preserve detector-position order for downstream spectral processing.
-   * - USB CDC
-     - The Embedded USB CDC system shall transfer complete measurement frames and supported control outcomes through the Integration interface contract.
-     - The Embedded USB CDC system shall use the shared Integration contract so the Host PC system can distinguish measurement content from control status.
-   * - Driver Board
-     - The Embedded driver-board system shall preserve detector timing, power integrity, and analog-signal integrity between the controller, TCD1304DG, and acquisition input.
-     - The Embedded driver-board system shall prevent electrical-interface degradation from invalidating detector timing or digitized measurements.
-   * - Calibrations
-     - The Embedded calibration system shall produce timing-reference and effective-frame-geometry evidence under the approved capture conditions.
-     - The Embedded calibration system shall provide evidence that acquired sample positions correspond to the detector behavior used by downstream processing.
-   * - Validation
-     - The Embedded validation system shall record the applicable requirement, configuration, evidence artifact, and disposition for each Embedded check.
-     - The Embedded validation system shall make results repeatable, comparable across revisions, and traceable to the requirement being evaluated.
+   * - Subsystem
+     - Primary Engineering Responsibility
+   * - :doc:`System Control and Hardware Interface <system_control_and_hardware_interface/index>`
+     - STM32F411 clocking, NVIC priority arbitration, ASCII command dispatch, state machine transitions, and TCD1304DG driver board interface.
+   * - :doc:`Timing and Data Acquisition <timing_and_data_acquisition/index>`
+     - Consolidated timer architecture (TIM1-TIM4), electronic shutter exposure scheduling, 12-bit ADC digitization, and 4-slot circular DMA buffer management.
+   * - :doc:`USB Transport and Verification <usb_transport_and_verification/index>`
+     - 28-byte binary frame serialization, 125 Hz USB CDC transport delivery, oscilloscope timing calibration, and requirements traceability.
 
 .. _uuid-704ce22a-40c3-4f92-ac0a-387165454c5a:
 
-Integration Boundary
---------------------
+Integration & Boundary Responsibilities
+---------------------------------------
 
 UUID: :ref:`704CE22A-40C3-4F92-AC0A-387165454C5A <uuid-704ce22a-40c3-4f92-ac0a-387165454c5a>`
 
-**Summary:** The Embedded system shall provide complete measurement frames,
-frame identity, status information, and supported control outcomes at the
-shared host-device boundary defined by
-:doc:`Integration Interfaces <../integration/interfaces/Interfaces>`. The
-Integration system shall define the packet marker, header, field widths, byte
-order, status meanings, acknowledgment behavior, recovery behavior,
-control-application boundary, and transported geometry beyond the 3648
-effective detector samples. These open interface details are ``Not In Docs``.
+The Embedded system interacts with external entities across strictly delineated boundaries:
 
-**Expected Outcome:** The Embedded system shall remain independently reviewable
-without duplicating the Integration wire contract or the Host PC system's
-correction, wavelength mapping, visualization, retention, and export behavior.
+* **Detector Hardware Boundary (Optics / Sensor Hardware):** Directs logic-level clock pulses (fM, SH, ICG) to the TCD1304DG sensor and receives the conditioned analog video signal through the driver board front-end. It enforces hardware constraints such as 2.0 MHz clock stability and 6.0 us SH pulse duration.
+* **Wire Transport Boundary (Integration):** Populates the shared wire contract defined in :doc:`Integration Interfaces <../integration/interfaces/system_boundaries/Integration Interfaces>`, transmitting 7416-byte binary packets and receiving ASCII commands over USB CDC. The Embedded system does not define host-side photometric corrections or UI display rendering.
+* **Measurement Plane Output:** Produces fully qualified, raw 16-bit ADC sample frames containing all 3648 effective detector pixels for consumption by the Host PC Primary Data Pipeline.
 
-**Rationale:** A single Integration boundary definition prevents the Embedded
-and Host PC systems from assigning conflicting meanings to the same exchange
-and keeps host-side calibration policy out of the detector-control subsystem.
+Normative System Requirements
+-----------------------------
 
-Related Pages
--------------
+.. _uuid-1c3c578d-65bf-40f8-beac-096c444a4db6:
 
-* :doc:`Controller <controller/Controller>`
-* :doc:`Calibrations <calibrations/Calibrations>`
-* :doc:`Timers <timers/Timers>`
-* :doc:`Acquisition <acquisition/Acquisition>`
-* :doc:`USB CDC <usb_cdc/USB CDC>`
-* :doc:`Driver Board <driver_board/Driver Board>`
-* :doc:`Validation <validation/Validation>`
+**Requirement:** The Embedded system shall preserve all 3648 effective detector samples in strict spatial acquisition sequence for every accepted measurement frame under all supported exposure regimes.
+
+   **Rationale:** Preserving sample acquisition order maintains the physical pixel-to-wavelength relationship required for optical dispersion mapping and prevents downstream corrections from being applied to the wrong detector positions.
+
+.. _uuid-a1100223-1001-4001-8001-001122334403:
+
+**Requirement:** The Embedded system shall transmit complete binary measurement frames over USB CDC with a monotonically incrementing 32-bit frame identifier and active integration time metadata at rates up to 125 Hz without silent frame truncation.
+
+   **Rationale:** Unambiguous frame identifiers and explicit metadata permit the Host PC to detect transport loss, align temporal logs, and verify exposure state without guessing frame status.

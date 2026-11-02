@@ -32,13 +32,9 @@ course-deliverable material is intentionally outside this documentation set.
    :caption: Embedded
 
    Embedded System Overview <subsystems/embedded/overview>
-   subsystems/embedded/controller/Controller
-   subsystems/embedded/calibrations/Calibrations
-   subsystems/embedded/timers/Timers
-   subsystems/embedded/acquisition/Acquisition
-   subsystems/embedded/usb_cdc/USB CDC
-   subsystems/embedded/driver_board/Driver Board
-   subsystems/embedded/validation/Validation
+   subsystems/embedded/system_control_and_hardware_interface/index
+   subsystems/embedded/timing_and_data_acquisition/index
+   subsystems/embedded/usb_transport_and_verification/index
 
 .. toctree::
    :maxdepth: 1
