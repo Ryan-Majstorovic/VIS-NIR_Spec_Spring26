@@ -7,7 +7,8 @@ Demonstration Test Plan
    scope for the second half of Fall 2026 and may gain or lose tests after
    the team reviews it against the overall lab scope. Until that review is
    complete, every test below has the status ``Proposed`` and no result is
-   claimed.
+   claimed. Numeric pass limits are taken from the team design document
+   (Sections 3.3 and 5).
 
 .. _uuid-92348097-c72d-4862-a675-5422f039ff9e:
 
@@ -122,8 +123,10 @@ UUID: :ref:`17AEB1A6-C1A5-4423-BE7C-21589E099359 <uuid-17aeb1a6-c1a5-4423-be7c-2
      - Status
    * - EMB-1
      - CCD timing signals.
-     - Measure fM, SH, and ICG with an oscilloscope. Pass when fM is 2 MHz,
-       the ICG period is 8 ms, and SH matches the firmware configuration.
+     - Measure fM, SH, and ICG with an oscilloscope and compare them with the
+       TCD1304DG timing diagram. Pass when fM is 2 MHz ±0.1%, the ICG period
+       is 8 ms with a 7.388 ms pulse width, and SH has a 10 µs set time with
+       its pulse aligned to the ICG off time.
      - Proposed
    * - EMB-2
      - USB stream integrity.
@@ -134,7 +137,8 @@ UUID: :ref:`17AEB1A6-C1A5-4423-BE7C-21589E099359 <uuid-17aeb1a6-c1a5-4423-be7c-2
    * - EMB-3
      - Dark baseline.
      - Cover the input, capture frames, and apply bias and dark correction.
-       Pass when the corrected baseline is near zero. Limit ``Not In Docs``.
+       Pass when the RMS noise floor of the corrected no-light baseline is at
+       least 50% lower than the uncorrected data under identical conditions.
      - Proposed
    * - EMB-4
      - No saturation.
@@ -179,12 +183,13 @@ UUID: :ref:`F38B3BD2-CD28-44AC-B457-676C1AD86474 <uuid-f38b3bd2-cd28-44ac-b457-6
      - Wavelength calibration.
      - Fit a pixel-to-wavelength map to the four reference lines and report
        residuals. Leave-one-out check: fit three lines and predict the
-       fourth. Fit form and error limit ``Not In Docs``.
+       fourth. Pass when each mapped peak is within approximately 2 nm of its
+       reference wavelength. Fit form ``Not In Docs``.
      - Proposed
    * - OPT-5
      - Line width.
-     - Measure the FWHM of each line in nm and compare it with the
-       approximately 5 nm target.
+     - Measure the FWHM of each line in nm. Pass when the FWHM is 5 nm or
+       less.
      - Proposed
    * - OPT-6
      - Second-order observation.
@@ -225,8 +230,8 @@ UUID: :ref:`8607F505-397A-4508-A711-A4AD54E46EDB <uuid-8607f505-397a-4508-a711-a
      - Status
    * - SW-1
      - Calibrated live display.
-     - After calibration, confirm the GUI shows each peak at its reference
-       wavelength on a wavelength axis.
+     - After calibration, confirm the GUI shows each peak within
+       approximately 2 nm of its reference wavelength on a wavelength axis.
      - Proposed
    * - SW-2
      - Blind identification.
@@ -274,16 +279,12 @@ UUID: :ref:`83440B99-224E-4CC3-A033-08A9328A5682 <uuid-83440b99-224e-4cc3-a033-0
      - Simulate the analog front end and confirm signal levels and bandwidth
        suit the ADC.
      - Proposed
-   * - OPT-F
-     - Optical model check.
-     - Compare the 3DOptix model's predicted peak positions with OPT-1 and
-       OPT-3 results to decide whether the model can be trusted for future
-       optics design.
-     - Proposed
 
-**Rationale:** The upgraded board and future optics will not be built this
-semester. A design review and a model checked against measured data let the
-team present them as credible next steps rather than unverified ideas.
+**Rationale:** The upgraded board will not be built this semester. A design
+review and a simulation let the team present it as a credible next step
+rather than an unverified idea. Future optical design adjustments could use
+optical modeling software such as 3DOptix to model the optical path; no
+modeling test is part of this plan.
 
 .. _uuid-5d6b240f-389f-46de-a639-ef2fcf6944c8:
 
