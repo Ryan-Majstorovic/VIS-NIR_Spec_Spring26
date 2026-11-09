@@ -1,344 +1,219 @@
 Optics System Overview
 ======================
 
-.. _B&W Tek bench listing: https://www.ebay.com/itm/144873214016
-.. _Thorlabs GR25-1850: https://www.thorlabs.com/item/GR25-1850
-.. _Thorlabs M14L01: https://www.thorlabs.com/item/M14L01
-.. _Thorlabs ADASMA: https://www.thorlabs.com/item/ADASMA
-
-.. _uuid-45725109-9bde-4f4d-9298-123e443f1d2a:
-
-Test Optical Bench
-------------------
-
-UUID: :ref:`45725109-9BDE-4F4D-9298-123E443F1D2A <uuid-45725109-9bde-4f4d-9298-123e443f1d2a>`
-
-**Summary:** We perform our optical testing on a used B&W Tek compact
-Czerny-Turner optical bench, procured as a parts set that contains the
-housing, its lid, a reflective diffraction grating with mount, a collimating
-mirror, and a focusing mirror. We mount the entrance slit on the front face
-of the housing and our TCD1304DG driver board at the housing's detector port.
-:numref:`fig-optics-test-build` shows our current build.
-
-.. figure:: /_static/images/optics/test-build-assembled.webp
-   :name: fig-optics-test-build
-   :width: 80%
-   :alt: Black B&W Tek bench housing with a red driver board mounted at the
-         detector port on one end and a slit mount on the front face.
-
-   Our assembled test build. The entrance slit mount sits on the front face
-   of the housing, and the TCD1304DG driver board is mounted at the detector
-   port on the end wall. Jumper leads carry the detector interface signals
-   off the board.
-
-The seller-supplied photographs below document the bench as procured.
-:numref:`fig-optics-bench-top` through :numref:`fig-optics-bench-angle-b` show the
-interior with the lid removed, :numref:`fig-optics-bench-port` shows the closed
-housing and its detector port, and :numref:`fig-optics-bench-scale` gives a size
-reference. Source for these figures and for the grating specification:
-`B&W Tek bench listing`_ (eBay item 144873214016, seller ``spectrophoton``).
-
-.. figure:: /_static/images/optics/bench-interior-top.webp
-   :name: fig-optics-bench-top
-   :width: 70%
-   :alt: Open bench housing viewed from above with the grating and mirrors in
-         their mounts.
-
-   Bench interior from above with the lid removed, showing the grating and
-   the two mirrors in their mounts. Identification of each element in this
-   view is ``Not In Docs``. Image source: `B&W Tek bench listing`_.
-
-.. figure:: /_static/images/optics/bench-interior-angle-a.webp
-   :name: fig-optics-bench-angle-a
-   :width: 70%
-   :alt: Open bench housing viewed at an angle from the entrance side.
-
-   Bench interior viewed at an angle from the entrance side. Image source:
-   `B&W Tek bench listing`_.
-
-.. figure:: /_static/images/optics/bench-interior-angle-b.webp
-   :name: fig-optics-bench-angle-b
-   :width: 70%
-   :alt: Open bench housing viewed at an angle from the opposite corner.
-
-   Bench interior viewed at an angle from the corner opposite the entrance.
-   Image source: `B&W Tek bench listing`_.
-
-.. figure:: /_static/images/optics/bench-detector-port.webp
-   :name: fig-optics-bench-port
-   :width: 70%
-   :alt: Closed bench housing with the rectangular detector port outlined on
-         the end wall.
-
-   Closed housing with the detector port outlined on the end wall. This is
-   the aperture at which we mount the TCD1304DG driver board. Image source:
-   `B&W Tek bench listing`_.
-
-.. figure:: /_static/images/optics/bench-scale-reference.webp
-   :name: fig-optics-bench-scale
-   :width: 45%
-   :alt: Open bench housing beside a steel ruler marked in centimeters.
-
-   Open bench beside a centimeter ruler for size reference. Image source:
-   `B&W Tek bench listing`_.
-
-.. _uuid-a03ee92d-4bf3-4c9d-9741-2089f22204fb:
-
-Optical Arrangement
--------------------
-
-UUID: :ref:`A03EE92D-4BF3-4C9D-9741-2089F22204FB <uuid-a03ee92d-4bf3-4c9d-9741-2089f22204fb>`
-
-**Summary:** Light follows the Czerny-Turner sequence defined in
-:doc:`Optics Architecture <optical_path/czerny_turner/Optics Architecture>`.
-The table below maps each element of that sequence to its location in our
-test build.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 18 37 25 20
-
-   * - Element
-     - Function
-     - Location In Our Build
-     - Open Items
-   * - Input fiber
-     - Delivers light from the source under test or the calibration source
-       to the entrance slit.
-     - `Thorlabs M14L01`_ patch cable (Ø50 µm core, 0.22 NA, low OH,
-       SMA-SMA, 1 m). A `Thorlabs ADASMA`_ mating sleeve joins the
-       calibration unit's fiber output to the patch cable.
-     - Fiber-to-slit mounting ``Not In Docs``.
-   * - Entrance slit
-     - Defines the source width presented to the spectrometer.
-     - Slit mount on the front face of the housing
-       (:numref:`fig-optics-test-build`).
-     - Slit width ``Not In Docs``.
-   * - Collimating mirror
-     - Collimates the light diverging from the slit and directs it to the
-       grating.
-     - Inside the housing (:numref:`fig-optics-bench-top`).
-     - Focal length ``Not In Docs``.
-   * - Diffraction grating
-     - Disperses the collimated beam by wavelength. The grating is reflective,
-       1800 lines/mm, blazed at 500 nm.
-     - Inside the housing in its supplied mount
-       (:numref:`fig-optics-bench-top`).
-     - Grating angle ``Not In Docs``.
-   * - Focusing mirror
-     - Images the dispersed spectrum onto the detector. The supplied mount
-       includes adjustment screws for alignment.
-     - Inside the housing (:numref:`fig-optics-bench-top`).
-     - Focal length ``Not In Docs``.
-   * - TCD1304DG linear CCD
-     - Converts the focused spectrum into a sequential analog signal for the
-       Embedded system.
-     - On our driver board at the detector port
-       (:numref:`fig-optics-test-build`, :numref:`fig-optics-bench-port`).
-     - Detector placement tolerance ``Not In Docs``.
-
-.. _uuid-c5c2b38e-2dcd-462a-a93f-d10755733d3d:
-
-Key Design Parameters
----------------------
-
-UUID: :ref:`C5C2B38E-2DCD-462A-A93F-D10755733D3D <uuid-c5c2b38e-2dcd-462a-a93f-d10755733d3d>`
-
-.. list-table::
-   :header-rows: 1
-   :widths: 28 42 30
-
-   * - Parameter
-     - Value
-     - Source
-   * - Optical bench
-     - B&W Tek compact Czerny-Turner bench, used, with lid
-     - `B&W Tek bench listing`_
-   * - Input fiber
-     - Multimode step-index patch cable, Ø50 µm core, 0.22 NA, low OH,
-       SMA-to-SMA, 1 m long (Thorlabs M14L01)
-     - `Thorlabs M14L01`_
-   * - Fiber mating sleeve
-     - SMA-to-SMA mating sleeve (Thorlabs ADASMA) joining the calibration
-       unit's fiber output to the input patch cable
-     - `Thorlabs ADASMA`_
-   * - Fiber NA match to the bench acceptance angle
-     - ``Not In Docs``
-     - To be determined once the mirror focal lengths are measured
-   * - Grating groove density
-     - 1800 lines/mm (groove spacing of approximately 555.6 nm)
-     - Listing; spacing derived from groove density
-   * - Grating blaze wavelength
-     - 500 nm
-     - `B&W Tek bench listing`_
-   * - Grating blaze angle
-     - 26° 44′, equal to the Littrow angle at the 500 nm blaze wavelength
-     - Manufacturer data for the matching `Thorlabs GR25-1850`_ part;
-       consistent with the 1800 lines/mm groove density. Not confirmed for
-       our grating.
-   * - Grating angular dispersion
-     - 0.50 nm/mrad
-     - Manufacturer data for the matching `Thorlabs GR25-1850`_ part;
-       consistent with the 1800 lines/mm groove density. Not confirmed for
-       our grating.
-   * - Grating efficiency at blaze wavelength
-     - 60% to 80%, with published efficiency curves measured in the Littrow
-       mounting configuration
-     - Manufacturer data for the matching `Thorlabs GR25-1850`_ part. Not
-       confirmed for our grating or our non-Littrow bench geometry.
-   * - First-order long-wavelength limit
-     - Below approximately 1111 nm (twice the groove spacing)
-     - Derived from groove density; consistent with the efficiency curve in
-       :numref:`fig-optics-grating-efficiency`
-   * - Expected average grating efficiency, 400 nm to 1000 nm
-     - Approximately 40% to 67%, read from the supplied curve
-     - :numref:`fig-optics-grating-efficiency` (supplied, not measured by us)
-   * - Housing size
-     - Approximately 7 cm along the long edge, estimated from the scale
-       photograph; caliper measurement ``Not In Docs``
-     - :numref:`fig-optics-bench-scale`
-   * - Detector
-     - TCD1304DG linear CCD on our driver board, mounted at the detector port
-     - Our build (:numref:`fig-optics-test-build`)
-   * - Slit width, mirror focal lengths, grating angle
-     - ``Not In Docs``
-     - To be measured on our build
-
-.. figure:: /_static/images/optics/grating-efficiency-1800-500nm.webp
-   :name: fig-optics-grating-efficiency
-   :width: 70%
-   :alt: Absolute efficiency versus wavelength from 200 nm to 1200 nm for
-         perpendicular, parallel, and average polarization.
-
-   Supplied absolute-efficiency curve for the 1800 lines/mm grating blazed at
-   500 nm, for perpendicular, parallel, and average polarization, where
-   polarization is defined with respect to the grating lines. Image source:
-   `B&W Tek bench listing`_. The plot matches the format of the curve
-   Thorlabs published for its `Thorlabs GR25-1850`_ (1800 lines/mm, 500 nm
-   blaze, measured in the Littrow mounting), which we take as the likely
-   original source. We padded the image and re-lettered the clipped y-axis
-   label; the curves, axes, and legend are unaltered.
-
-The supplied curve shows two behaviors that affect our measurements. First,
-efficiency depends strongly on polarization: the parallel component falls from
-approximately 67% near 390 nm to below 10% near 1000 nm, while the
-perpendicular component stays between approximately 65% and 85% from 450 nm to
-1000 nm. Second, every curve has a local minimum near 400 nm, at the short end
-of our target range. Both effects belong in the response-correction workflow
-described in :doc:`Optical Component Tradeoffs
-<tradeoffs/grating_selection/Optical Component Tradeoffs>`.
-
-Whether a single grating angle places the full 400 nm to 1000 nm first-order
-band across the 3648-pixel effective array depends on the mirror focal lengths
-and the grating angle, which are ``Not In Docs``. We treat full-range coverage
-on this bench as unverified until we measure it as described in
-:doc:`Wavelength Coverage And Resolution
-<performance_characterization/wavelength_and_resolution/Wavelength Coverage And Resolution>`.
-
-**Requirement:** The Optics system shall use the test bench described in this
-section, with the TCD1304DG driver board mounted at its detector port, as the
-optical configuration for all optical characterization and measurement.
-
-**Rationale:** Holding the slit, mirrors, grating, and detector port to one
-known geometry lets us attribute measured coverage, FWHM, and throughput to
-that geometry rather than to differences between rebuilds.
-
-**Requirement:** The Optics system shall accept input light through an
-SMA-terminated low-OH multimode fiber to deliver 400 nm to 1000 nm light to
-the entrance slit without OH absorption loss in the 800 nm to 1000 nm band.
-
-**Rationale:** Standard silica fiber absorbs too much light in the 800 nm to
-1000 nm band, which would weaken the long-wavelength end of the spectrum,
-where the detector and grating response are already low, and bias any
-measurement made there.
-
-**Requirement:** The Optics system shall record the slit, grating, mirror,
-filter, and detector-port configuration of the test bench with every
-characterization record to identify the optical geometry that produced each
-result.
-
-**Rationale:** A change to any bench element alters wavelength coverage,
-resolution, and throughput. Without the recorded configuration, we cannot
-separate a change in measured performance caused by the optics from one caused
-by acquisition or host-side processing.
+This page states what the Optics system is for, the optical design approach we
+chose, and the design criteria the optics must meet. Hardware details of our
+build are in :doc:`Optics Architecture
+<optical_path/czerny_turner/Optics Architecture>`, and the tests that check
+each criterion are in :doc:`Optics Verification <verification/Optics Verification>`.
 
 .. _uuid-48fc9581-eaff-4e34-9b0c-0d1bf006e71f:
 
-System Role
------------
+Purpose
+-------
 
 UUID: :ref:`48FC9581-EAFF-4E34-9B0C-0D1BF006E71F <uuid-48fc9581-eaff-4e34-9b0c-0d1bf006e71f>`
 
-**Summary:** The Optics system shall accept input light and coordinate
-collimation, wavelength dispersion, focusing, filtering, alignment, enclosure,
-and performance characterization to image a VIS-NIR spectrum onto the
-TCD1304DG effective detector array.
+**Summary:** The Optics system takes light delivered by fiber, separates it by
+wavelength, and focuses the resulting spectrum across the TCD1304DG linear CCD
+so that each detector pixel receives a narrow, repeatable band of wavelengths.
+Everything downstream depends on that mapping: the Embedded system digitizes
+the pixel intensities, and the Host PC converts pixel position into
+wavelength. If the optics place a wavelength at the wrong pixel, spread it over
+too many pixels, or move it between captures, no later processing can recover
+the lost information.
 
-**Expected Outcome:** The Optics system shall provide usable wavelength
-coverage from 400 nm to 1000 nm and approximately 5 nm FWHM for narrow sources.
+**Expected Outcome:** The Optics system shall provide usable first-order
+coverage from 400 nm to 1000 nm and approximately 5 nm FWHM for narrow
+sources, with peak positions stable enough to support a pixel-to-wavelength
+calibration.
 
-**Rationale:** Coordinating the optical path, filtering, and mechanical
-alignment preserves the wavelength-dependent image needed for detector capture
-and allows measured optical performance to be attributed to a repeatable
-configuration.
+For the current project scope, the optics are exercised with the laser
+calibration unit (405 nm, 520 nm, 650 nm, and 980 nm lines) as described in the
+:doc:`Demonstration Test Plan
+<../test_and_verification/demo_test_plan>`. Order-sorting filters, a
+custom-built enclosure, and a redesigned optical layout are future work.
+
+.. _uuid-e3f10c7f-da96-4576-bbff-497412e4dddf:
+
+Design Approach
+---------------
+
+UUID: :ref:`E3F10C7F-DA96-4576-BBFF-497412E4DDDF <uuid-e3f10c7f-da96-4576-bbff-497412e4dddf>`
+
+**Summary:** The optics use a Czerny-Turner mirror arrangement, the
+two-concave-mirror geometry of a Czerny-Turner monochromator. A monochromator
+passes one wavelength at a time through an exit slit. We replace the exit slit
+with the TCD1304DG linear CCD, so the instrument records the whole dispersed
+band in a single exposure (strictly, it operates as a Czerny-Turner
+spectrograph).
+
+We chose this arrangement for three reasons:
+
+* **All-reflective focusing.** Mirrors focus every wavelength at the same
+  distance, while a lens focuses blue and near-infrared light at different
+  distances. Over a 400 nm to 1000 nm band, a lens-based design would leave one
+  end of the spectrum out of focus.
+* **Compact, folded path.** The two mirrors fold the beam back on itself, so
+  the path fits a small housing. A transmission-grating layout is mechanically
+  simpler but needs a long straight path that did not fit our size target.
+* **Available hardware.** A used B&W Tek compact Czerny-Turner bench gives us
+  a working housing, mirrors, and a reflective grating, so the project can
+  focus on detection, calibration, and software rather than building a bench
+  from scratch.
+
+The accepted cost is alignment sensitivity: slit position, mirror tilt,
+grating angle, and detector placement all interact, and a small error in any
+one broadens lines or shifts the band off the detector. The full comparison
+of grating options is in :ref:`Optical Component Tradeoffs
+<uuid-d5cfd390-4e80-489e-87b7-ce1fc5e2e11d>`.
+
+.. _uuid-3ba60956-b9ba-4440-a771-5fd750687808:
+
+Light Path And Focusing
+-----------------------
+
+UUID: :ref:`3BA60956-B9BA-4440-A771-5FD750687808 <uuid-3ba60956-b9ba-4440-a771-5fd750687808>`
+
+**Summary:** Light travels through five stages. Each stage either shapes the
+beam or sets where a wavelength lands on the detector.
+
+1. **Fiber input.** A low-OH multimode fiber carries light from the source to
+   the entrance slit. The fiber's numerical aperture sets the cone of light
+   that leaves the slit.
+2. **Entrance slit.** The slit is the object the spectrometer images. A
+   narrower slit gives a narrower line image and finer resolution but passes
+   less light.
+3. **Collimating mirror.** A concave mirror placed one focal length from the
+   slit turns the diverging cone into a parallel beam and directs it onto the
+   grating.
+4. **Diffraction grating.** The reflective grating sends each wavelength off
+   at a different angle. Longer wavelengths leave at larger angles, which
+   spreads the spectrum across one axis.
+5. **Focusing mirror and detector.** A second concave mirror brings each
+   wavelength's parallel beam to a focus at a different point along the
+   TCD1304DG array. Each point is an image of the entrance slit in that
+   wavelength's light.
+
+Focus is set by the focusing-mirror adjustment screws and the detector
+position. The Czerny-Turner focal surface is not perfectly flat, but the CCD
+is, so best focus is a compromise across the band: a detector placed for the
+sharpest 520 nm line can leave the 405 nm and 980 nm lines slightly broader.
+For this reason, line width is checked at every reference wavelength rather
+than only at the center of the array.
+
+The fiber's light cone should fill the collimating mirror without spilling
+past it. Light that misses the mirror scatters inside the housing as stray
+light. Whether the 0.22 NA fiber matches the bench's acceptance angle depends
+on the mirror focal lengths, which are ``Not In Docs``.
 
 .. _uuid-3a113e98-e52c-4b54-8624-4939610e4ed2:
 
-System Objectives
------------------
+Design Criteria And Requirements
+--------------------------------
 
 UUID: :ref:`3A113E98-E52C-4B54-8624-4939610E4ED2 <uuid-3a113e98-e52c-4b54-8624-4939610e4ed2>`
 
-**Objective 1:** **Optical transformation.** The Optics system shall accept
-incident light, collimate it, disperse it by wavelength, and focus the spectrum
-across the detector.
+**Requirement OPT-R1 (Wavelength coverage):** The Optics system shall
+disperse first-order light from 400 nm to 1000 nm across the 3648-pixel
+effective array of the TCD1304DG at one fixed grating angle.
 
-**Rationale:** Preserving this sequence establishes the detector-position
-relationship required for wavelength measurement.
+**Rationale:** A single fixed geometry lets one pixel-to-wavelength map cover
+the full target band. If either end of the band falls off the array, that
+part of the spectrum cannot be measured at all.
 
-**Objective 2:** **Component and filtering decisions.** The Optics system shall
-record how the grating, slit, mirrors, and filters affect wavelength coverage,
-resolution, throughput, second-order overlap, stray light, and alignment.
+**Requirement OPT-R2 (Spectral resolution):** The Optics system shall focus
+narrow-line sources to a FWHM of approximately 5 nm at each reference
+wavelength across the operating band.
 
-**Rationale:** Recording each tradeoff prevents a component choice from changing
-instrument performance without reviewable evidence.
+**Rationale:** Line width sets how close two spectral features can be and
+still be told apart. Checking at each wavelength catches focus and aberration
+errors that only appear away from the center of the array.
 
-**Objective 3:** **Physical verification.** The Optics system shall provide
-alignment, enclosure, and characterization evidence for wavelength coverage,
-FWHM, wavelength accuracy, SNR, linearity, repeatability, stray light, and
-reference comparison.
+**Requirement OPT-R3 (Reflective imaging):** The Optics system shall use
+concave mirrors, not lenses, for collimation and focusing to keep 400 nm to
+1000 nm light in focus at a single detector position.
 
-**Rationale:** Physical evidence is needed to distinguish predicted optical
-performance from measured instrument performance.
+**Rationale:** Lenses focus different wavelengths at different distances, so
+a refractive design would blur one end of the band for any one detector
+position.
 
-.. _uuid-e19ea297-0d3d-4bb1-b420-629bde897454:
+**Requirement OPT-R4 (Fiber input):** The Optics system shall accept input
+light through an SMA-terminated low-OH multimode fiber to deliver 400 nm to
+1000 nm light to the entrance slit without OH absorption loss in the 800 nm to
+1000 nm band.
 
-System Relationship
--------------------
+**Rationale:** Standard silica fiber absorbs light in the 800 nm to 1000 nm
+band, which would weaken the long-wavelength end of the spectrum, where the
+detector and grating response are already low.
 
-UUID: :ref:`E19EA297-0D3D-4BB1-B420-629BDE897454 <uuid-e19ea297-0d3d-4bb1-b420-629bde897454>`
+**Requirement OPT-R5 (Ordered, repeatable dispersion):** The Optics system
+shall place wavelengths on the detector in monotonic order and return each
+reference line to the same pixel position across repeated captures, fiber
+reconnection, and electronics power cycling.
+
+**Rationale:** A pixel-to-wavelength map is only valid if pixel position
+depends on wavelength alone. Drift or reordering would make the calibrated
+wavelength axis wrong between calibrations. The allowed repeatability limit
+is ``Not In Docs``.
+
+**Requirement OPT-R6 (Second-order overlap):** The Optics system shall allow
+second-order diffraction of short-wavelength light into the long-wavelength
+region of the detector to be identified and measured before an order-sorting
+filter is selected.
+
+**Rationale:** Second-order 405 nm light lands near 810 nm, inside our
+operating band, where it would read as false near-infrared signal. Measuring
+its size first tells us what filter cutoff and attenuation the future
+order-sorting filter needs.
+
+**Requirement OPT-R7 (Light exclusion):** The Optics system shall block
+ambient light from reaching the detector during measurement.
+
+**Rationale:** Room light adds a background that varies with time and is not
+removed by a dark frame captured at a different moment, which biases every
+intensity measurement.
+
+.. _uuid-081c35f5-b08b-4642-a380-db10c5000a8e:
+
+Verification Summary
+--------------------
+
+UUID: :ref:`081C35F5-B08B-4642-A380-DB10C5000A8E <uuid-081c35f5-b08b-4642-a380-db10c5000a8e>`
+
+**Summary:** Each criterion above is checked by one or more tests in the
+:doc:`Demonstration Test Plan <../test_and_verification/demo_test_plan>`. The
+optics-specific view of those tests is in :doc:`Optics Verification
+<verification/Optics Verification>`.
 
 .. list-table::
    :header-rows: 1
+   :widths: 30 30 40
 
-   * - System
-     - Primary Responsibility
-     - Downstream Or Adjacent Relationship
-   * - Optical Path
-     - The Optics optical-path system shall define the slit, collimation, dispersion, focusing, and detector-imaging sequence.
-     - The Optics optical-path system shall establish wavelength-dependent illumination on the TCD1304DG effective array.
-   * - Tradeoffs
-     - The Optics tradeoff system shall record component and geometry choices with their optical consequences.
-     - The Optics tradeoff system shall relate each choice to alignment, throughput, coverage, and resolution.
-   * - Filtering
-     - The Optics filtering system shall limit second-order overlap and other unwanted wavelength content before detector capture.
-     - The Optics filtering system shall control the optical content presented to the detector and downstream Host PC processing.
-   * - Alignment And Enclosure
-     - The Optics alignment-and-enclosure system shall establish repeatable placement, light exclusion, and mechanical stability.
-     - The Optics alignment-and-enclosure system shall preserve the optical configuration used for characterization and measurement.
-   * - Performance Characterization
-     - The Optics performance-characterization system shall define coverage, FWHM, accuracy, SNR, linearity, repeatability, stray-light, and comparison checks.
-     - The Optics performance-characterization system shall provide optical evidence to Test and Verification and Host PC calibration workflows.
+   * - Criterion
+     - Tests
+     - Current Scope
+   * - OPT-R1 Wavelength coverage
+     - OPT-2, OPT-3
+     - Checked with the 405 nm and 980 nm lines.
+   * - OPT-R2 Spectral resolution
+     - OPT-5
+     - Checked at all four laser lines.
+   * - OPT-R3 Reflective imaging
+     - Inspection, OPT-5
+     - Met by the bench design; OPT-5 confirms focus across the band.
+   * - OPT-R4 Fiber input
+     - FIB-1
+     - Checked through the ADASMA sleeve and M14L01 cable.
+   * - OPT-R5 Ordered, repeatable dispersion
+     - OPT-1, OPT-2, OPT-4, OPT-7, OPT-8
+     - Checked; repeatability limit ``Not In Docs``.
+   * - OPT-R6 Second-order overlap
+     - OPT-6
+     - Observation only; filter mitigation is future work.
+   * - OPT-R7 Light exclusion
+     - EMB-3
+     - Covered by the dark-baseline check with the bench lid closed.
 
 .. _uuid-14a977b2-a1cd-404e-9500-1eacbf249040:
 
@@ -347,31 +222,21 @@ Integration Boundary
 
 UUID: :ref:`14A977B2-A1CD-404E-9500-1EACBF249040 <uuid-14a977b2-a1cd-404e-9500-1eacbf249040>`
 
-**Summary:** The Optics system shall provide wavelength-dependent illumination
-at the detector boundary. The Embedded system shall control detector timing and
-digitization after that optical handoff. The Host PC system shall perform
-pixel-to-wavelength association, correction, visualization, retention, and
-export. The Test and Verification system shall provide canonical pass/fail
-disposition.
-
-Component placement tolerances, final slit width, grating angle, focus
-tolerance, filter cutoff profile, enclosure limits, and most quantitative
-characterization acceptance thresholds remain ``Not In Docs`` until approved
-requirements and methods are available.
-
-**Expected Outcome:** The Optics system shall remain independently reviewable
-without duplicating Embedded acquisition, Host PC processing, or Integration
-transport behavior.
+**Summary:** The Optics system ends at the detector surface, where it
+delivers wavelength-dependent illumination to the TCD1304DG. The Embedded
+system controls detector timing and digitization after that handoff. The Host
+PC system performs pixel-to-wavelength association, correction, display, and
+export. The Test and Verification system assigns pass/fail disposition.
 
 **Rationale:** Separating optical formation, detector acquisition, host-side
 processing, and pass/fail disposition prevents multiple subsystems from
 defining or evaluating the same boundary behavior differently.
 
-Related Pages
--------------
+Optics Pages
+------------
 
-* :doc:`Optical Path <optical_path/Optical Path>`
-* :doc:`Tradeoffs <tradeoffs/Tradeoffs>`
-* :doc:`Filtering <filtering/Filtering>`
-* :doc:`Alignment And Enclosure <alignment_enclosure/Alignment And Enclosure>`
-* :doc:`Performance Characterization <performance_characterization/Performance Characterization>`
+* :doc:`Optics Architecture <optical_path/czerny_turner/Optics Architecture>`:
+  our test bench, its components and parameters, grating behavior, component
+  tradeoffs, second-order control, and alignment.
+* :doc:`Optics Verification <verification/Optics Verification>`: how each
+  design criterion is tested and what each test record must contain.
