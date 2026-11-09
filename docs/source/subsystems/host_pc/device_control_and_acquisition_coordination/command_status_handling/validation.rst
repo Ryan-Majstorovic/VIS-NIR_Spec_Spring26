@@ -18,7 +18,7 @@ UUID: :ref:`DB41E4E1-356B-457A-A6BE-1BEC4B47D889 <uuid-db41e4e1-356b-457a-a6be-1
 
 **Future Implementation Location:** Host PC Command Status Handling boundary; implementation location to be assigned during later implementation review.
 
-**Requirements/Reference Evidence:** Host PC overview; Integration interface documentation
+**Requirements/Reference Evidence:** Host PC overview
 
 **Open Decisions State:** Not In Docs
 

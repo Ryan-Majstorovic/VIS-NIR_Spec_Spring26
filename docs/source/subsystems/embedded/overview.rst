@@ -99,8 +99,7 @@ UUID: :ref:`704CE22A-40C3-4F92-AC0A-387165454C5A <uuid-704ce22a-40c3-4f92-ac0a-3
 
 **Summary:** The Embedded system shall provide complete measurement frames,
 frame identity, status information, and supported control outcomes at the
-shared host-device boundary defined by
-:doc:`Integration Interfaces <../integration/interfaces/Interfaces>`. The
+shared host-device boundary. The
 Integration system shall define the packet marker, header, field widths, byte
 order, status meanings, acknowledgment behavior, recovery behavior,
 control-application boundary, and transported geometry beyond the 3648

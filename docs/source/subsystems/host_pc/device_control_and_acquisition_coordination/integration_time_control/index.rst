@@ -80,8 +80,7 @@ UUID: :ref:`42D4406F-361A-43A5-B55E-64705ADD0752 <uuid-42d4406f-361a-43a5-b55e-6
 
 **Summary:** The Host PC integration-time-control system shall submit supported
 integration-time requests and receive their outcomes at the MCU-to-Host PC
-boundary defined by :doc:`Integration Interfaces
-<../../../integration/interfaces/system_boundaries/Integration Interfaces>`.
+boundary.
 Integration owns wire-level request encoding, acknowledgment, and
 device-application semantics; units, range, quantization, default,
 acknowledgment behavior, and the exact application boundary remain ``Not In

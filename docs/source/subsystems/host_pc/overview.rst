@@ -80,8 +80,6 @@ Integration Boundary
 UUID: :ref:`7E7E9CF8-7577-4DC8-97B7-6730476D1D41 <uuid-7e7e9cf8-7577-4dc8-97b7-6730476d1d41>`
 
 **Summary:** The Host PC system shall receive measurement frames and exchange
-supported control requests and command outcomes at the MCU-to-Host PC boundary
-defined by
-:doc:`Integration Interfaces <../integration/interfaces/system_boundaries/Integration Interfaces>`.
+supported control requests and command outcomes at the MCU-to-Host PC boundary.
 The Integration system shall define the optical-to-CCD, CCD-to-MCU, and
 MCU-to-Host PC boundaries.

@@ -21,8 +21,8 @@ make complete measurement frames available to the host computer.
 The controller is responsible for acquisition coordination, not host-side
 calibration, wavelength mapping, display, or CSV export.  The exact command
 encoding, status encoding, integration-time units and limits, and complete
-transported sample geometry are shared-contract items and remain open until
-specified by the Integration section.
+transported sample geometry are shared-contract items and remain
+``Not In Docs``.
 
 **Requirement status:** documented intended behavior; firmware alignment is
 ``Not Started``.

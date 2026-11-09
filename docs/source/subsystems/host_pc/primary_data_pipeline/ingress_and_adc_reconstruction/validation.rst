@@ -18,7 +18,7 @@ UUID: :ref:`1F30FBF2-AA1C-41D0-9E46-66765F5A51A5 <uuid-1f30fbf2-aa1c-41d0-9e46-6
 
 **Future Implementation Location:** Host PC Ingress And ADC Reconstruction boundary; implementation location to be assigned during later implementation review.
 
-**Requirements/Reference Evidence:** Requirements And Metrics.rst; System Overview.rst; Integration interface documentation
+**Requirements/Reference Evidence:** Requirements And Metrics.rst; System Overview.rst
 
 **Open Decisions State:** Not In Docs
 

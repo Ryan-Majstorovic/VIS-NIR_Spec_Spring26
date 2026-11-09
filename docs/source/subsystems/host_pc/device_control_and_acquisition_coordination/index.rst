@@ -78,8 +78,7 @@ UUID: :ref:`960065A1-1E9D-4DDF-AFC9-CB37E5C57D47 <uuid-960065a1-1e9d-4ddf-afc9-c
 
 **Summary:** The Host PC device-control and acquisition-coordination system
 shall exchange supported acquisition-control requests and device outcomes at
-the MCU-to-Host PC boundary defined by :doc:`Integration Interfaces
-<../../integration/interfaces/system_boundaries/Integration Interfaces>`.
+the MCU-to-Host PC boundary.
 Integration owns wire-level command encoding, status meanings,
 acknowledgments, timing, retry, recovery, and request-application details;
 unresolved specifics remain ``Not In Docs``.

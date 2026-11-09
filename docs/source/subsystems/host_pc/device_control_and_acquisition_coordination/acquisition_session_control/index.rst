@@ -80,8 +80,7 @@ UUID: :ref:`E1252260-9443-43E9-A8AE-295125BDB6A3 <uuid-e1252260-9443-43e9-a8ae-2
 
 **Summary:** The Host PC acquisition-session-control system shall exchange
 supported Start and Stop requests, outcomes, complete frames, and status at the
-MCU-to-Host PC boundary defined by :doc:`Integration Interfaces
-<../../../integration/interfaces/system_boundaries/Integration Interfaces>`.
+MCU-to-Host PC boundary.
 Integration owns the low-level request and frame-transfer contract; pause,
 buffering, backpressure, dropped-frame response, and stop/drain policy remain
 ``Not In Docs``.

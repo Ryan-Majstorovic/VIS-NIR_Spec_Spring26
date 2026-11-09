@@ -78,8 +78,7 @@ Integration Boundary
 UUID: :ref:`6C564B0A-52AF-463E-AA6A-246B9B60C66F <uuid-6c564b0a-52af-463e-aa6a-246b9b60c66f>`
 
 **Summary:** The Host PC connection-management system shall determine
-availability and readiness at the MCU-to-Host PC boundary defined by
-:doc:`Integration Interfaces <../../../integration/interfaces/system_boundaries/Integration Interfaces>`.
+availability and readiness at the MCU-to-Host PC boundary.
 Integration owns the low-level attachment and transport boundary; device
 discovery, port selection, automatic reconnect, timeout, and retry policy
 remain ``Not In Docs``.

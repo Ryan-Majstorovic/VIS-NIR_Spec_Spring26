@@ -78,8 +78,7 @@ Integration Boundary
 UUID: :ref:`60C343D4-D0A3-4F70-AD8A-3857E1B3077B <uuid-60c343d4-d0a3-4f70-ad8a-3857e1b3077b>`
 
 **Summary:** The Host PC command-status-handling system shall submit eligible
-commands and receive command outcomes at the MCU-to-Host PC boundary defined by
-:doc:`Integration Interfaces <../../../integration/interfaces/system_boundaries/Integration Interfaces>`.
+commands and receive command outcomes at the MCU-to-Host PC boundary.
 Integration owns wire-level command and status definitions; command vocabulary,
 status vocabulary, timeout, retry, and recovery rules remain ``Not In Docs``.
 
