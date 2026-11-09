@@ -3,7 +3,7 @@ VIS-NIR Spectrometer Technical Documentation
 
 This documentation describes the current technical design for the VIS-NIR
 spectrometer prototype. It is limited to optics, embedded acquisition,
-host-PC software, calibration, integration, and characterization. Nontechnical
+host-PC software, calibration, and characterization. Nontechnical
 course-deliverable material is intentionally outside this documentation set.
 
 .. toctree::
@@ -21,11 +21,8 @@ course-deliverable material is intentionally outside this documentation set.
    :caption: Optics
 
    Optics System Overview <subsystems/optics/overview>
-   subsystems/optics/optical_path/Optical Path
-   subsystems/optics/tradeoffs/Tradeoffs
-   subsystems/optics/filtering/Filtering
-   subsystems/optics/alignment_enclosure/Alignment And Enclosure
-   subsystems/optics/performance_characterization/Performance Characterization
+   subsystems/optics/optical_path/czerny_turner/Optics Architecture
+   subsystems/optics/verification/Optics Verification
 
 .. toctree::
    :maxdepth: 1
@@ -48,14 +45,6 @@ course-deliverable material is intentionally outside this documentation set.
    subsystems/host_pc/primary_data_pipeline/index
    subsystems/host_pc/device_control_and_acquisition_coordination/index
    subsystems/host_pc/operator_application/index
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Integration
-
-   subsystems/integration/data_flow/Data Flow
-   subsystems/integration/interfaces/Interfaces
-   subsystems/integration/test_strategy/Test Strategy
 
 .. toctree::
    :maxdepth: 1
