@@ -100,13 +100,6 @@ every optical result is measured against the laser reference wavelengths.
        the detector.
      - OPT-R7
      - Proposed
-   * - OPT-F
-     - Optical model check (design review)
-     - Compares the 3DOptix model's predicted peak positions with OPT-1 and
-       OPT-3 to decide whether the model can be trusted for future optics
-       design.
-     - Future design
-     - Proposed
 
 EMB-4 (no saturation) must pass before OPT-4 and OPT-5 are trusted, because
 a clipped peak has a shifted center and a widened FWHM.
