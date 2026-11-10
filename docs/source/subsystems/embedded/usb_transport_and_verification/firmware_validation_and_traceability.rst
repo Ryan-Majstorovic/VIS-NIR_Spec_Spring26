@@ -73,7 +73,7 @@ The embedded timing and communication logic is verified through automated test s
    * Verifies state machine transitions between ``STOPPED``, ``RUNNING``, and ``RECONFIGURING``.
    * Verifies that the initial frame following an exposure change is discarded.
 3. **Independent Stream Inspector (``Spectrometer-COM-Inspector/spectrometer_com_inspector.py``):**
-   * Intercepts raw USB serial streams, verifies 28-byte binary packet headers, validates sequence counter monotonicity, and logs frame inter-arrival jitter.
+   * Intercepts raw USB serial streams, verifies 32-byte binary packet headers, validates sequence counter monotonicity, and logs frame inter-arrival jitter.
 
 Embedded Requirements Traceability Matrix
 -----------------------------------------
@@ -92,7 +92,7 @@ Embedded Requirements Traceability Matrix
      - ``Core/Src/main.c``
      - Firmware compilation & boot verification.
    * - ``E1000002``
-     - Generation of fM (2 MHz), SH (6 us pulse), and ICG (7.388 ms pulse) across 10 us to 5 s exposures.
+     - Generation of fM (2 MHz), SH (6 us pulse), and ICG (8 us low per frame) across 10 us to 5 s exposures.
      - :doc:`../timing_and_data_acquisition/ccd_timing_and_waveform_generation`
      - ``Core/Inc/ccd_timing.h``
      - ``test_ccd_timer_schedule.py`` & oscilloscope inspection.
@@ -102,7 +102,7 @@ Embedded Requirements Traceability Matrix
      - ``Core/Src/main.c`` (``hadc1`` / ``hdma_adc1``)
      - ``test_integration_timing.py`` & dark frame verification.
    * - ``E1000004``
-     - Complete binary measurement frames with 28-byte header and frame ID streamed over USB CDC.
+     - Complete binary measurement frames with 32-byte header and frame ID streamed over USB CDC.
      - :doc:`usb_cdc_stream_and_packetization`
      - ``USB_DEVICE/App/usbd_cdc_if.c``
      - ``spectrometer_com_inspector.py`` stream validation.

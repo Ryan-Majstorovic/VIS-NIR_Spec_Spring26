@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import ctypes
 import os
+import sys
 from pathlib import Path
+
+# Embedded Python distributions can omit the script directory from sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 KIVY_NO_ARGS_ENV = "KIVY_NO_ARGS"
 KIVY_NO_CONSOLELOG_ENV = "KIVY_NO_CONSOLELOG"

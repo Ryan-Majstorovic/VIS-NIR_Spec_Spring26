@@ -193,22 +193,18 @@ The calibration manager is opened from `Tools` and gives the calibration workflo
 
 It currently supports:
 
-- processing toggles for dark subtraction, intensity correction, and QE/response correction
-- display normalization mode: `Absolute Saturation` or `Auto Range`
-- direct wavelength polynomial editing
-- wavelength fit order control
+- live correction toggles in the Bias And Dark Terms, Flat-Field / PRNU, and QE / Response Curve cards
 - master bias `B_p` capture from recent covered-sensor frames
 - master bias and master-dark vector editing
 - manual pixel-to-wavelength mapping point entry
 - guided laser-diode mapping by clicking a peak on the plot and capturing that pixel
-- coefficient fitting from saved mapping points
+- fit order, active fit status, and **Fit Wavelength Map** in Wavelength Mapping
 - flat-field / PRNU correction factor entry
 - QE / response point entry and normalization wavelength selection
-- previewing calibration without saving
-- saving calibration and syncing user config
 
-The x-axis stays in pixel mode until saved wavelength mapping points and non-default coefficients exist.
-This prevents stale coefficient text from making an uncalibrated graph look wavelength-calibrated.
+The **Save Calibration** button in the manager header validates and applies manual correction edits, writes the calibration profile, and syncs user settings. Correction toggles, bias capture, timing assignment, and successful wavelength fits update the live display immediately.
+
+Fit new or changed reference points before saving them. A successful fit switches the x-axis to wavelength when the map is active. Resetting the mapping or saving an empty point table restores pixel mode.
 
 ## Display And Layout Manager
 
@@ -217,6 +213,7 @@ The display/layout manager is opened from `Tools`.
 It currently controls:
 
 - line spectrum vs rolling spectrogram graph mode
+- **Spectrum scaling** in **Live Graph** with `Absolute Saturation` and `Auto Range`
 - spectrogram time window: `2 s`, `5 s`, `10 s`, or `20 s`
 - visibility of the Session And Commands card
 - visibility of the Diagnostics card
@@ -225,6 +222,7 @@ It currently controls:
 
 Some display settings are stored in memory immediately and are written to `configs/user.json` when user settings are saved.
 If a field is absent from `configs/default_user.json`, the Pydantic model default in `backend/models/config.py` is used.
+Spectrum scaling updates immediately and persists through **Save Calibration**. Each binary recording uses the scaling selected at its start.
 
 ## Performance Diagnostics
 
@@ -347,6 +345,21 @@ If you want to understand the project from top to bottom, this is a good reading
 14. `CODE_TOUR.md`
 
 ## Detailed Documentation
+
+The production firmware now sends CCD1 v3 packets with CRC32 and timing profile
+`0x00010001`. The desktop decoder also reads legacy v1/v2 frames, whose timing
+profile remains unknown. Stored bias must match the frame profile; stored dark
+offsets must match both profile and integration time. Older calibration arrays
+remain saved but are bypassed for the corrected production profile.
+
+In **Display Manager**, choose **Raw ADC - full frame** to inspect all 3694
+samples on a 0–4095 scale. The plot status reports the nominal shielded-reference
+median, its difference from the active median, and calibration compatibility.
+A shifted-reference warning is a screening heuristic, not proof of saturation.
+Capture a fresh covered baseline after the timing change. The nominal 32/3648/14
+mapping remains unchanged until sensor-pin timing and optical alignment are verified.
+
+HDF5 recordings retain the per-frame timing profile and original ADC counts. Session ZIP files carry the counts in `frames.csv` and the associated timing ranges in `calibration.json`.
 
 For the file-by-file walkthrough that explains every module and the main runtime paths, read:
 

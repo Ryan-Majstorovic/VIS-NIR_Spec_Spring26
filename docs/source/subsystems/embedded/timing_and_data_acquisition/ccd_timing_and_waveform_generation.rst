@@ -36,11 +36,11 @@ Inputs and Outputs
      - Symmetrical 50% duty clock driving sensor internal shift registers.
    * - **Output**
      - Shift Gate (SH)
-     - 6.0 us pulse (PB0)
+     - 6.0 us detector pulse (PA6 before board inversion)
      - Precision electronic shutter gate pulse transferring photo-charge.
    * - **Output**
      - Integration Clear Gate (ICG)
-     - 7.388 ms high pulse (PB6)
+     - 8 us detector-low interval per frame (PB6 before board inversion)
      - Readout gate signal controlling charge transfer to output amplifier.
    * - **Output**
      - ADC Trigger (TRGO)
@@ -58,15 +58,32 @@ Normative Requirements
 
 .. _uuid-b2c3014d-f0cc-4941-81e7-09fb6163d08a:
 
-**Requirement:** The Embedded timer system shall maintain a constant pulse high duration of 6.0 us (12 timer ticks at 2.0 MHz) for every emitted shift-gate (SH) pulse on PB0 under all valid integration times to preserve uniform charge-transfer dynamics.
+**Requirement:** The Embedded timer system shall maintain a constant pulse high duration of 6.0 us (12 timer ticks at 2.0 MHz) for every emitted shift-gate (SH) detector pulse driven through PA6 under all valid integration times to preserve uniform charge-transfer dynamics.
 
    **Rationale:** Varying the pulse width of SH rather than its repetition interval distorts the electrostatic barrier beneath the photodiode transfer gates, inducing non-linear charge transfer and non-uniform pixel response.
 
 .. _uuid-74a5107f-b5cb-4448-9b43-b93dadbeacfc:
 
-**Requirement:** The Embedded timer system shall generate the integration clear gate (ICG) on PB6 with a constant high readout interval of 7.388 ms (14,776 timer ticks at 2.0 MHz) for every physical frame readout under both short and long exposure regimes.
+**Requirement:** The Embedded timer system shall drive detector-polarity ICG low
+for 8 us at the start of every physical frame and high for the remainder of the
+frame, including continuation timer segments, to transfer the line after SH falls.
 
-   **Rationale:** The 3694 detector line elements require exactly 7.388 ms to read out sequentially at the 2.0 MHz pixel cadence (2 clock cycles per pixel = 1 us/pixel; 3694 us active readout plus analog settling intervals); altering the readout interval disrupts pixel acquisition synchronization.
+**Rationale:** The former 612 us low interval overlapped the next SH pulse at
+short exposure settings; a fixed 8 us interval separates ICG rise from the
+6 us SH pulse and still leaves at least 7992 us for the 7388 us readout.
+
+**Requirement:** The Embedded timer system shall place the first detector SH
+rise 0.5 us after ICG falls and its fall 6 us later during every physical frame
+to provide nominal t2 = 0.5 us and t1 = 1.5 us.
+
+**Rationale:** These separations support the datasheet t2 interval of 0.1 to
+1 us, t3 minimum of 1 us, and t1 minimum of 1 us without changing SH width.
+
+**Requirement:** The Embedded acquisition system shall start with 100 us
+integration following reset to provide the measured corrected-timing starting profile.
+
+**Rationale:** Dim-input trials resolved more useful contrast at 100 us than
+at the 10 us minimum; startup exposure remains adjustable for actual illumination.
 
 .. _uuid-f805db53-c28c-4f0f-ba98-548d34a9c887:
 
@@ -88,10 +105,10 @@ The embedded architecture allocates five dedicated timer peripherals to coordina
      - Channel / Pin
      - Mode & Operational Role
    * - ``TIM1``
-     - 47
-     - 2.0 MHz
+     - 0
+     - 96.0 MHz
      - CH1 / ``PA8``
-     - PWM Mode 1. Generates continuous 2.0 MHz master clock (fM) with ARR = 1 and CCR1 = 1.
+     - PWM Mode 1. ARR = 47 and CCR1 = 24 produce a 2 MHz master clock.
    * - ``TIM2``
      - 0
      - 96.0 MHz
@@ -100,13 +117,13 @@ The embedded architecture allocates five dedicated timer peripherals to coordina
    * - ``TIM3``
      - 47
      - 2.0 MHz
-     - CH1 / ``PB0``
+     - CH1 / ``PA6``
      - PWM Mode 1. Generates Shift Gate (SH) with fixed CCR1 = 12 (6.0 us high pulse).
    * - ``TIM4``
      - 47
      - 2.0 MHz
      - CH1 / ``PB6``
-     - PWM Mode 2. Generates ICG frame readout pulse with fixed 7.388 ms high time.
+     - PWM Mode 2. CCR1 = 16 in segment zero and zero thereafter; output inversion compensates board inversion.
    * - ``TIM5``
      - N/A
      - N/A
@@ -116,7 +133,7 @@ The embedded architecture allocates five dedicated timer peripherals to coordina
 Integration Time Scheduling Architecture
 ----------------------------------------
 
-The firmware implements electronic shutter exposure control using the TCD1304DG electronic shutter mechanism. The exposure duration represents the time between the final shift gate (SH) pulse and the subsequent falling edge of ICG:
+The firmware implements electronic shutter exposure control using the TCD1304DG electronic shutter mechanism. The requested exposure duration defines the SH repetition interval. Absolute optical exposure and sensor-side propagation require characterization:
 
 Short Exposure Regime (:math:`10\,\mu\text{s} \le t_{\text{int}} \le 8000\,\mu\text{s}`)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -140,8 +157,8 @@ For integration times exceeding 8 ms, the overall frame duration expands to matc
      N = \left\lceil \frac{t_{\text{int}}}{32000} \right\rceil
 
 * For a 5.0 s exposure, :math:`N = 157` segments.
-* During segments :math:`0` through :math:`N-2`, ``TIM4`` (ICG) remains held low, inhibiting readout while optical photons accumulate.
-* In the final segment :math:`N-1`, ``TIM4`` generates the 7.388 ms high readout pulse to transfer the accumulated line charge.
+* Segment zero contains the 8 us ICG-low interval and the SH transfer pulse.
+* All subsequent segments keep ICG high and SH low until the next physical frame.
 
 Seamless DMA Shadow Register Reload
 -----------------------------------
@@ -151,3 +168,17 @@ To guarantee glitch-free multi-segment timing without software interrupt latency
 1. A precomputed schedule array of ``CcdTimingSegment`` structs (containing ``ARR`` and ``CCR`` values) is stored in SRAM.
 2. ``DMA1_Stream2`` (mapped to TIM3 update) and ``DMA1_Stream6`` (mapped to TIM4 update) transfer the next segment's parameters directly into timer shadow registers at every timer overflow.
 3. The hardware updates occur synchronously within a single clock cycle at counter zero, eliminating CPU latency and phase jitter.
+
+Verification boundary
+---------------------
+
+**Requirement:** The scope validation system shall distinguish MCU-pad
+observations from sensor-pin timing and optical pixel identification for each
+capture to prevent software projections from being reported as physical validation.
+
+**Rationale:** USB/SWD access cannot measure inverter propagation, sensor-pin
+t4, ADC input settling, or identify an exact dummy element from a brightness threshold.
+
+**Source evidence:** Toshiba TCD1304DG Rev. 1.5, pp. 5-8; user-approved production
+timing correction, 2026-11-09. Captures and results are implementation evidence
+in ``.scratch/production-timing/``, separate from these intended behaviors.

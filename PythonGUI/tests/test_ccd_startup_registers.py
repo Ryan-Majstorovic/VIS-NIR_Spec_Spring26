@@ -37,6 +37,21 @@ HAL_StatusTypeDef __wrap_HAL_DMA_Abort(DMA_HandleTypeDef *h) { return HAL_OK; }
 HAL_StatusTypeDef __wrap_HAL_DMA_Init(DMA_HandleTypeDef *h) { return HAL_OK; }
 HAL_StatusTypeDef __wrap_HAL_DMA_Start_IT(DMA_HandleTypeDef *h, uint32_t s, uint32_t d, uint32_t n) { return HAL_OK; }
 void configure(uint32_t us) {
+  if (us == 0U || us == 1U) {
+    uint32_t ids[4] = {3U, 1U, 4U, 2U};
+    for (uint32_t i=0; i<4; ++i) {
+      ccd_frame_slots[i].ready = 1U;
+      ccd_frame_slots[i].packet.header.frame_id = us ? i - 2U : ids[i];
+    }
+    uint32_t order=0U;
+    for (uint32_t i=0; i<4; ++i) {
+      int32_t slot = FindNextReadyFrameSlot();
+      order |= (slot + 1U) << (i*4U);
+      ReleaseFrameSlot(slot);
+    }
+    TIM1->CNT = order;
+    return;
+  }
   htim1.Instance = TIM1; htim2.Instance = TIM2;
   htim3.Instance = TIM3; htim4.Instance = TIM4;
   hadc1.Instance = ADC1;
@@ -77,7 +92,7 @@ void configure(uint32_t us) {
         return struct.unpack("<I", self.uc.mem_read(address, 4))[0]
 
     def test_real_startup_polarity_phase_and_independent_trigger_routing(self):
-        for us in (10, 8000, 8001, 32001, 5_000_000):
+        for us in (0, 1, 10, 8000, 8001, 32001, 5_000_000):
             with self.subTest(integration_us=us):
                 u = self.unicorn
                 self.uc = u.Uc(u.UC_ARCH_ARM, u.UC_MODE_THUMB | u.UC_MODE_MCLASS)
@@ -103,6 +118,9 @@ void configure(uint32_t us) {
                 self.uc.emu_start(self.entry | 1, 0x1F000, count=100000)
                 self.assertEqual(self.uc.reg_read(self.reg.UC_ARM_REG_PC), 0x1F000)
                 tim1, tim2, tim3, tim4 = 0x40010000, 0x40000000, 0x40000400, 0x40000800
+                if us in (0, 1):
+                    self.assertEqual(self.read(tim1 + 0x24), 0x4321 if us else 0x3142)
+                    continue
                 self.assertEqual(self.read(tim1 + 0x24), 36)  # Phase seed: MCU low / detector high.
                 self.assertEqual(self.read(tim1 + 0x20) & 3, 1)  # PA8 non-inverted, enabled.
                 for timer in (tim3, tim4):

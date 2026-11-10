@@ -9,10 +9,11 @@ from pathlib import Path
 import statistics
 import struct
 import time
+import zlib
 
 import serial
 
-HEADER = struct.Struct('<4sBBHIHHHHII')
+HEADER = struct.Struct('<4sBBHIHHHHIII')
 SHORT = [us for us in range(10, 8001) if 8000 % us == 0]
 LONG = [8001, 12500, 32000, 32001, 64001, 100001, 1000000, 5000000]
 
@@ -49,16 +50,20 @@ class Capture:
                 if len(self.buffer) < HEADER.size:
                     break
                 h = HEADER.unpack_from(self.buffer)
-                size = HEADER.size + h[9]
-                if h[1:3] != (2, 1) or h[5:8] != (3694, 32, 3648) or h[9] != 7388:
+                size = HEADER.size + h[9] + 4
+                if h[1:3] != (3, 1) or h[5:8] != (3694, 32, 3648) or h[9] != 7388 or h[11] != 65537:
                     self.bad.append(list(h[1:]))
                     del self.buffer[0]
                     continue
                 if len(self.buffer) < size:
                     break
+                if zlib.crc32(self.buffer[:size-4]) != struct.unpack_from('<I', self.buffer, size-4)[0]:
+                    self.bad.append({'crc_error': h[4]})
+                    del self.buffer[0]
+                    continue
                 samples = struct.unpack_from('<3694H', self.buffer, HEADER.size)
                 frame = dict(t=time.perf_counter()-self.start, id=h[4], us=h[10],
-                             flags=h[8], minimum=min(samples), maximum=max(samples))
+                             flags=h[8], profile=h[11], minimum=min(samples), maximum=max(samples))
                 self.frames.append(frame)
                 self.events.write(json.dumps(frame)+'\n')
                 del self.buffer[:size]

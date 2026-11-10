@@ -97,7 +97,7 @@ uint32_t evaluate(uint32_t us, uint32_t index, uint32_t sh, uint32_t field) {
             pb6 = oc_ref ^ internal_inversion
             ccd_icg = pb6 ^ board_inversion  # U1 74HC04
             ccd_high_ticks += ccd_icg
-        self.assertEqual(ccd_high_ticks, 7388 * 2)
+        self.assertEqual(ccd_high_ticks, (8000 - 8) * 2)
 
     def setUp(self):
         self.board_inversion = self.evaluate(8000, field=7)
@@ -139,7 +139,7 @@ uint32_t evaluate(uint32_t us, uint32_t index, uint32_t sh, uint32_t field) {
         for us in (10, 8000, 8001, 12500, 32001, 100001, 5_000_000):
             frame_us = max(8000, us)
             for frame in (0, 1, 1000):
-                rising_cpu_tick = (frame * frame_us + frame_us - 7388) * 96
+                rising_cpu_tick = (frame * frame_us + 8) * 96
                 counter = (seed + rising_cpu_tick) % period
                 self.assertEqual(self.detector_level(int(counter < high_ticks), inversion), 1)
         # Nominal alignment is centered within high, not on a clock edge.
@@ -177,11 +177,12 @@ uint32_t evaluate(uint32_t us, uint32_t index, uint32_t sh, uint32_t field) {
                         active, shadow = shadow, dma[i % n]
                 self.assertEqual([ccr for _, ccr in sh], [12] + [0] * (n - 1))
                 high_ticks = sum(max(0, arr + 1 - ccr) for arr, ccr in icg)
-                self.assertEqual(high_ticks, 7388 * 2)
-                self.assertEqual((icg[-1][0] + 1 - icg[-1][1]) / 2, 7388)
+                self.assertEqual(high_ticks, (us - 8) * 2)
+                self.assertEqual(icg[0][1] / 2, 8)
+                self.assertGreaterEqual(8 - (0.5 + sh[0][1] / 2), 1)
                 self.assertEqual(sh[0][1] / 2, 6)
-                # Every other ICG segment is continuously low, including at overflow.
-                self.assertTrue(all(ccr == arr + 1 for arr, ccr in icg[:-1]))
+                # Every later ICG segment stays high across overflow.
+                self.assertTrue(all(ccr == 0 for arr, ccr in icg[1:]))
 
 
 if __name__ == "__main__":

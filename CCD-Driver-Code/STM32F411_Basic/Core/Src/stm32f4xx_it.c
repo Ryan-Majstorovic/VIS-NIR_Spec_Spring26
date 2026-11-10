@@ -56,6 +56,9 @@
 
 /* External variables --------------------------------------------------------*/
 extern DMA_HandleTypeDef hdma_adc1;
+extern ADC_HandleTypeDef hadc1;
+extern void CCD_AdcDmaIrqBegin(void);
+extern void CCD_AdcDmaIrqEnd(void);
 extern TIM_HandleTypeDef htim4;
 extern DMA_HandleTypeDef hdma_tim3_up;
 extern DMA_HandleTypeDef hdma_tim4_up;
@@ -210,7 +213,9 @@ void DMA2_Stream0_IRQHandler(void)
   /* USER CODE BEGIN DMA2_Stream0_IRQn 0 */
 
   /* USER CODE END DMA2_Stream0_IRQn 0 */
+  CCD_AdcDmaIrqBegin();
   HAL_DMA_IRQHandler(&hdma_adc1);
+  CCD_AdcDmaIrqEnd();
   /* USER CODE BEGIN DMA2_Stream0_IRQn 1 */
 
   /* USER CODE END DMA2_Stream0_IRQn 1 */
@@ -222,7 +227,11 @@ void DMA2_Stream0_IRQHandler(void)
 void TIM4_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM4_IRQn 0 */
-
+  /* If zoom observation deferred both events, update the segment before CC1. */
+  if ((TIM4->SR & TIM_SR_UIF) && (TIM4->DIER & TIM_DIER_UIE)) {
+    __HAL_TIM_CLEAR_IT(&htim4, TIM_IT_UPDATE);
+    HAL_TIM_PeriodElapsedCallback(&htim4);
+  }
   /* USER CODE END TIM4_IRQn 0 */
   HAL_TIM_IRQHandler(&htim4);
   /* USER CODE BEGIN TIM4_IRQn 1 */
@@ -250,3 +259,7 @@ void OTG_FS_IRQHandler(void)
 
 void DMA1_Stream2_IRQHandler(void) { HAL_DMA_IRQHandler(&hdma_tim3_up); }
 void DMA1_Stream6_IRQHandler(void) { HAL_DMA_IRQHandler(&hdma_tim4_up); }
+
+#ifndef CCD_SCOPE_DIAGNOSTIC
+void ADC_IRQHandler(void) { HAL_ADC_IRQHandler(&hadc1); }
+#endif

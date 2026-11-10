@@ -188,8 +188,12 @@ class CommandService:
         if not status["active"] or status["failed"]:
             return
         assert self._binary_processor is not None and self._recording_calibration is not None
+        current = self._binary_processor.calibration_config
+        recording_config = config.model_copy(update={"display_normalization_mode": current.display_normalization_mode})
+        if recording_config == current:
+            return
         try:
-            processor = DenseFrameProcessor(self._binary_processor.device_config, self._saved_calibration)
+            processor = DenseFrameProcessor(self._binary_processor.device_config, recording_config)
             calibration = processor.recording_calibration(self._recording_calibration.revision + 1)
         except Exception as exc:
             recorder.fail(f"Could not apply saved calibration: {exc}")
@@ -210,7 +214,9 @@ class CommandService:
             output_path = Path(path) if path is not None else self._binary_export_dir / f"spectrometer_capture_{timestamp}.h5"
             try:
                 config = self._state_manager.get_user_config()
-                self._binary_processor = DenseFrameProcessor(config.device, self._saved_calibration)
+                scaling = self._state_manager.get_calibration_config().display_normalization_mode
+                recording_config = self._saved_calibration.model_copy(update={"display_normalization_mode": scaling})
+                self._binary_processor = DenseFrameProcessor(config.device, recording_config)
                 self._recording_calibration = self._binary_processor.recording_calibration(0)
                 self._binary_recorder = DenseBinaryRecorder(
                     output_path,

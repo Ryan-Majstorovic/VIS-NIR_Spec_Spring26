@@ -33,7 +33,7 @@ Inputs and Outputs
    * - **Output**
      - Sealed Frame Packet
      - ``CcdUsbFramePacket``
-     - Completed 7416-byte packet (28-byte header + 7388-byte payload) ready for wire transmission.
+     - Completed 7424-byte packet (32-byte header + 7388-byte payload + 4-byte CRC) ready for wire transmission.
    * - **Output**
      - Frame Dropped Counter
      - uint32 diagnostic counter
@@ -70,7 +70,7 @@ The firmware maintains a statically allocated pool of four frame buffers:
    #define CCD_FRAME_BUFFER_COUNT 4U
 
    typedef struct {
-     CcdUsbFramePacket packet;   /* 28-byte header + 7388-byte sample array */
+     CcdUsbFramePacket packet;   /* 32-byte header + 7388-byte sample array + 4-byte CRC */
      volatile uint8_t active;   /* 1 if currently being filled by ADC DMA */
      volatile uint8_t ready;    /* 1 if acquisition complete, awaiting USB TX */
      uint16_t flags;            /* Frame diagnostic status flags */
@@ -100,4 +100,18 @@ Each slot cycles through four states during acquisition and transfer:
 1. **Slot Allocation:** Prior to the next ICG readout edge, the firmware calls ``AcquireFrameSlot()``. If a slot with ``active == 0`` and ``ready == 0`` is available, it is allocated and populated with the next ``frame_id`` and configuration metadata.
 2. **DMA Arming:** ``ArmFrameCapture()`` points ``DMA2_Stream0`` to the allocated slot's ``payload`` array and prepares the peripheral for conversion.
 3. **Capture Sealing:** Upon completion of all 3694 conversions, ``HAL_ADC_ConvCpltCallback`` validates completion, stamps the header status flags, and sets ``ready = 1``.
-4. **Wire Transmission:** The background polling loop discovers the oldest ready slot, calls ``CDC_Transmit_Blocking()`` to send the 7416 bytes over USB, and clears the slot flags with ``ReleaseFrameSlot()``.
+4. **Wire Transmission:** The background polling loop selects the oldest completed frame by hardware frame ID and starts its 7424-byte transfer.
+
+**Requirement:** The Embedded buffer manager shall retain ownership of a USB
+payload until the endpoint reports completion, including after a transmission
+timeout, to prevent ADC reallocation from changing bytes still in flight.
+
+**Rationale:** A timeout bounds waiting but does not terminate the USB DMA/endpoint
+transfer; recycling the slot early can corrupt the remaining packet.
+
+**Requirement:** The Embedded buffer manager shall transmit completed frames
+in hardware-frame order following host backpressure to preserve monotonic frame
+identity while exposing skipped acquisitions as counter gaps.
+
+**Rationale:** Buffer-slot rotation alone does not preserve acquisition order
+when some slots remain occupied longer than others.

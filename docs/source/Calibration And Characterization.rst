@@ -66,3 +66,32 @@ measurement, and verification of automatic baseline subtraction.
 
 
 
+
+Production timing-profile compatibility
+---------------------------------------
+
+**Requirement:** The Host PC calibration system shall apply stored bias only
+when its timing-profile identity matches the incoming frame and stored dark
+offsets only when both timing profile and integration duration match to prevent
+old-waveform calibrations from altering corrected-timing measurements.
+
+**Rationale:** The previous ICG waveform produced a substantially different
+light response at the same nominal exposure; duration alone cannot establish compatibility.
+
+**Requirement:** The Host PC visualization system shall provide raw full-frame
+ADC display and nominal shielded-reference statistics alongside processed display
+to expose a collapsed or shifted reference even when subtraction produces near-zero output.
+
+**Rationale:** Frame normalization can hide whether low processed signal arose
+from genuinely low light or a displaced reference level.
+
+**Requirement:** The Host PC recording system shall preserve raw counts and
+per-frame timing-profile identity in HDF5 and shall preserve their association
+through the frame CSV and timing ranges in the session ZIP for later calibration
+compatibility review.
+
+**Rationale:** Retained derived intensity alone cannot reconstruct a bypassed
+or incompatible correction.
+
+**Context:** Reference-shift screening in the desktop app is a heuristic, not
+a calibrated overload limit. A sensor-specific acceptance threshold is ``Not In Docs``.

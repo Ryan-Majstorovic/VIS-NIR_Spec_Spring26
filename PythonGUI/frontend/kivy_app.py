@@ -4,6 +4,7 @@ import sys
 from collections import deque
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
+from math import isfinite
 from pathlib import Path
 from threading import Thread
 from time import perf_counter
@@ -211,9 +212,9 @@ WORKSPACE_CARD_DISPLAY_BUTTON_TEXT = "Display & Layout"
 # Calibration card parameters.
 # Format:
 # - these values control the calibration card wording, hint text, and helper copy.
-CALIBRATION_CARD_WAVELENGTH_HINT = "Wavelength coefficients"
 CALIBRATION_CARD_DARK_TEXT = "Apply dark subtraction"
 CALIBRATION_CARD_INTENSITY_TEXT = "Apply intensity correction"
+CALIBRATION_CARD_QE_TEXT = "Apply QE / response correction"
 CALIBRATION_CARD_SAVE_BUTTON_TEXT = "Save Calibration"
 
 # Calibration manager parameters.
@@ -221,7 +222,7 @@ CALIBRATION_CARD_SAVE_BUTTON_TEXT = "Save Calibration"
 # - these values control the full-screen calibration workflow shown in the main content area.
 CALIBRATION_MANAGER_TITLE_TEXT = "Calibration Manager"
 CALIBRATION_MANAGER_SUBTITLE_TEXT = (
-    "Run guided calibration steps here without squeezing them into the side panel."
+    "Capture references, fit the wavelength map, and save correction edits."
 )
 CALIBRATION_MANAGER_BACK_BUTTON_TEXT = "Return To Live Display"
 CALIBRATION_MANAGER_LIST_TITLE_TEXT = "Calibration Routines"
@@ -233,7 +234,7 @@ CALIBRATION_MANAGER_DARK_REFERENCE_DESC = "Measure covered-sensor baseline count
 CALIBRATION_MANAGER_INTENSITY_REFERENCE_TEXT = "Capture Intensity Reference"
 CALIBRATION_MANAGER_INTENSITY_REFERENCE_DESC = "Record a flat-field style reference for response correction."
 CALIBRATION_MANAGER_WAVELENGTH_REVIEW_TEXT = "Review Wavelength Fit"
-CALIBRATION_MANAGER_WAVELENGTH_REVIEW_DESC = "Check polynomial coefficients and update the wavelength map."
+CALIBRATION_MANAGER_WAVELENGTH_REVIEW_DESC = "Review the active wavelength fit and update the wavelength map."
 
 # Display manager parameters.
 # Format:
@@ -248,6 +249,9 @@ DISPLAY_MANAGER_GRAPH_HELPER_TEXT = "Switch between the line plot and a rolling 
 DISPLAY_MANAGER_GRAPH_MODE_LABEL_TEXT = "Graph mode"
 DISPLAY_MANAGER_GRAPH_MODE_SPECTRUM_TEXT = "Line Spectrum"
 DISPLAY_MANAGER_GRAPH_MODE_SPECTROGRAM_TEXT = "Rolling Spectrogram"
+DISPLAY_MANAGER_SCALING_LABEL_TEXT = "Spectrum scaling"
+DISPLAY_MANAGER_SCALING_AUTO_TEXT = "Auto Range"
+DISPLAY_MANAGER_SCALING_ABSOLUTE_TEXT = "Absolute Saturation"
 DISPLAY_MANAGER_SPECTROGRAM_WINDOW_LABEL_TEXT = "Spectrogram time window"
 DISPLAY_MANAGER_SPECTROGRAM_WINDOW_HELPER_TEXT = "Choose how much recent time the rolling spectrogram should show."
 DISPLAY_MANAGER_PANELS_CARD_TITLE_TEXT = "Side Panels"
@@ -333,21 +337,6 @@ PERFORMANCE_CARD_COLLECTING_TEXT = (
 CALIBRATION_EDITOR_HEIGHT = dp(120)
 CALIBRATION_EDITOR_HEIGHT_COMPACT = dp(96)
 
-# Calibration manager settings card parameters.
-# Format:
-# - these values control the top-level toggles and shared calibration settings.
-CALIBRATION_SETTINGS_CARD_TITLE_TEXT = "Processing Pipeline"
-CALIBRATION_SETTINGS_CARD_FIT_ORDER_HINT = "Wavelength fit order"
-CALIBRATION_SETTINGS_CARD_QE_TEXT = "Apply QE / response correction"
-CALIBRATION_SETTINGS_CARD_NORMALIZATION_LABEL_TEXT = "Display normalization mode"
-CALIBRATION_SETTINGS_CARD_NORMALIZATION_AUTO_TEXT = "Auto Range"
-CALIBRATION_SETTINGS_CARD_NORMALIZATION_ABSOLUTE_TEXT = "Absolute Saturation"
-CALIBRATION_SETTINGS_CARD_APPLY_BUTTON_TEXT = "Preview Calibration"
-CALIBRATION_SETTINGS_CARD_SAVE_BUTTON_TEXT = "Save Calibration"
-CALIBRATION_SETTINGS_CARD_HELPER_TEXT = (
-    "These toggles control the live processed spectrum. Additive terms are removed before multiplicative response terms."
-)
-
 # Calibration manager bias/dark card parameters.
 # Format:
 # - these values control the Bp and master-dark capture/editing section.
@@ -391,8 +380,8 @@ CALIBRATION_WAVELENGTH_GUIDED_CAPTURED_TEMPLATE = (
 CALIBRATION_WAVELENGTH_GUIDED_COMPLETE_TEMPLATE = (
     "Guided mapping complete. Captured {captured} wavelength references."
 )
-CALIBRATION_WAVELENGTH_FIT_BUTTON_TEXT = "Fit Coefficients From Pixel Map"
-CALIBRATION_WAVELENGTH_SUMMARY_TEMPLATE = "Pixel mapping references: {count}"
+CALIBRATION_WAVELENGTH_FIT_ORDER_TEXT = "Wavelength fit order"
+CALIBRATION_WAVELENGTH_FIT_BUTTON_TEXT = "Fit Wavelength Map"
 CALIBRATION_WAVELENGTH_PLOT_HEIGHT = dp(260)
 CALIBRATION_WAVELENGTH_PLOT_HEIGHT_COMPACT = dp(210)
 
@@ -1170,7 +1159,6 @@ class DesktopSpectrometerApp(App):
         self.integration_input = None
         self.integration_unit = None
         self.integration_status = None
-        self.wavelength_input: TextInput | None = None
         self.wavelength_fit_order_input: TextInput | None = None
         self.normalization_mode_spinner: Spinner | None = None
         self.pixel_mapping_input: TextInput | None = None
@@ -1204,6 +1192,8 @@ class DesktopSpectrometerApp(App):
         self.qe_summary_label: Label | None = None
         self.guided_mapping_status_label: Label | None = None
         self.guided_mapping_selection_label: Label | None = None
+        self.raw_adc_view = False
+        self.raw_view_spinner: Spinner | None = None
         self.graph_mode_spinner: Spinner | None = None
         self.spectrogram_time_window_spinner: Spinner | None = None
         self.plot: SpectrumPlot | None = None
@@ -1239,7 +1229,9 @@ class DesktopSpectrometerApp(App):
         self._right_column: BoxLayout | None = None
         self._main_content_container: BoxLayout | None = None
         self._plot_card: Card | None = None
-        self._calibration_manager_card: Widget | None = None
+        self._calibration_manager_card: BoxLayout | None = None
+        self._calibration_scroll_content: BoxLayout | None = None
+        self._calibration_header_card: Card | None = None
         self._display_manager_card: Widget | None = None
         self._header_card: Card | None = None
         self._header_title_label: Label | None = None
@@ -1437,7 +1429,7 @@ class DesktopSpectrometerApp(App):
         command_card.add_widget(self._section_title(COMMAND_CARD_TITLE_TEXT))
         command_card.add_widget(self._section_title("Integration time"))
         exposure_row = BoxLayout(size_hint_y=None, height=CONTROL_HEIGHT, spacing=CARD_GAP)
-        self.integration_input = TextInput(text="10", multiline=False)
+        self.integration_input = TextInput(text="100", multiline=False)
         self._configure_text_input(self.integration_input)
         self.integration_unit = Spinner(text="µs", values=("µs", "ms", "s"), size_hint_x=0.35)
         exposure_row.add_widget(self.integration_input)
@@ -1473,6 +1465,7 @@ class DesktopSpectrometerApp(App):
         plot_card.add_widget(self._plot_title_label)
         self.stream_label = Label(
             text=SPECTRUM_CARD_WAITING_STREAM_MARKUP,
+            color=TEXT_PRIMARY_RGBA,
             markup=True,
             size_hint_y=None,
             height=HEADER_NOTICE_HEIGHT,
@@ -1480,6 +1473,7 @@ class DesktopSpectrometerApp(App):
             valign="middle",
         )
         self._configure_label_wrapping(self.stream_label)
+        self._configure_report_label(self.stream_label, min_height=dp(48))
         plot_card.add_widget(self.stream_label)
 
         # Plot shell keeps the y-axis aligned only to the chart area, while the
@@ -1536,6 +1530,7 @@ class DesktopSpectrometerApp(App):
         plot_shell.add_widget(x_axis_shell)
         plot_card.add_widget(plot_shell)
 
+        calibration_manager_view = BoxLayout(orientation="vertical", spacing=APP_GAP)
         calibration_manager_scroll = ScrollView(
             do_scroll_x=False,
             do_scroll_y=True,
@@ -1557,89 +1552,29 @@ class DesktopSpectrometerApp(App):
         calibration_header_card.bind(minimum_height=calibration_header_card.setter("height"))
         calibration_header_card.add_widget(self._section_title(CALIBRATION_MANAGER_TITLE_TEXT))
         calibration_header_card.add_widget(self._small_label(CALIBRATION_MANAGER_SUBTITLE_TEXT))
-        calibration_header_card.add_widget(
+        calibration_header_actions = BoxLayout(size_hint_y=None, height=BUTTON_HEIGHT, spacing=CARD_GAP)
+        calibration_header_actions.add_widget(
             self._button(
                 CALIBRATION_MANAGER_BACK_BUTTON_TEXT,
                 self.show_spectrum_view,
-                size_hint_y=None,
-                height=BUTTON_HEIGHT,
             )
         )
-        calibration_manager_card.add_widget(calibration_header_card)
-
-        calibration_settings_card = Card(size_hint_y=None)
-        calibration_settings_card.bind(minimum_height=calibration_settings_card.setter("height"))
-        calibration_settings_card.add_widget(self._section_title(CALIBRATION_SETTINGS_CARD_TITLE_TEXT))
-        calibration_settings_card.add_widget(self._small_label(CALIBRATION_SETTINGS_CARD_HELPER_TEXT))
-        self.wavelength_input = TextInput(
-            text=", ".join(str(value) for value in calibration_config.wavelength_coefficients),
-            multiline=False,
-            hint_text=CALIBRATION_CARD_WAVELENGTH_HINT,
-            size_hint_y=None,
-            height=CONTROL_HEIGHT,
+        calibration_header_actions.add_widget(
+            self._button(CALIBRATION_CARD_SAVE_BUTTON_TEXT, self.save_calibration)
         )
-        self._configure_text_input(self.wavelength_input)
-        calibration_settings_card.add_widget(self.wavelength_input)
-        self.wavelength_fit_order_input = TextInput(
-            text=str(calibration_config.wavelength_fit_order),
-            multiline=False,
-            hint_text=CALIBRATION_SETTINGS_CARD_FIT_ORDER_HINT,
-            size_hint_y=None,
-            height=CONTROL_HEIGHT,
-        )
-        self._configure_text_input(self.wavelength_fit_order_input)
-        calibration_settings_card.add_widget(self.wavelength_fit_order_input)
-        calibration_settings_card.add_widget(
-            self._small_label(CALIBRATION_SETTINGS_CARD_NORMALIZATION_LABEL_TEXT)
-        )
-        self.normalization_mode_spinner = Spinner(
-            text=(
-                CALIBRATION_SETTINGS_CARD_NORMALIZATION_ABSOLUTE_TEXT
-                if calibration_config.display_normalization_mode == "absolute_saturation"
-                else CALIBRATION_SETTINGS_CARD_NORMALIZATION_AUTO_TEXT
-            ),
-            values=(
-                CALIBRATION_SETTINGS_CARD_NORMALIZATION_AUTO_TEXT,
-                CALIBRATION_SETTINGS_CARD_NORMALIZATION_ABSOLUTE_TEXT,
-            ),
-            size_hint_y=None,
-            height=CONTROL_HEIGHT,
-            sync_height=True,
-        )
-        self.normalization_mode_spinner.font_size = f"{BODY_FONT_SP}sp"
-        self.normalization_mode_spinner.bind(text=lambda *_args: self.preview_calibration())
-        calibration_settings_card.add_widget(self.normalization_mode_spinner)
-        self.dark_checkbox = CheckBox(active=calibration_config.apply_dark_subtraction)
-        self.dark_checkbox.bind(active=lambda *_args: self.preview_calibration())
-        calibration_settings_card.add_widget(self._checkbox_row(CALIBRATION_CARD_DARK_TEXT, self.dark_checkbox))
-        self.intensity_checkbox = CheckBox(active=calibration_config.apply_intensity_correction)
-        self.intensity_checkbox.bind(active=lambda *_args: self.preview_calibration())
-        calibration_settings_card.add_widget(self._checkbox_row(CALIBRATION_CARD_INTENSITY_TEXT, self.intensity_checkbox))
-        self.qe_checkbox = CheckBox(active=calibration_config.apply_quantum_efficiency_correction)
-        self.qe_checkbox.bind(active=lambda *_args: self.preview_calibration())
-        calibration_settings_card.add_widget(self._checkbox_row(CALIBRATION_SETTINGS_CARD_QE_TEXT, self.qe_checkbox))
-        calibration_settings_card.add_widget(
-            self._button(
-                CALIBRATION_SETTINGS_CARD_APPLY_BUTTON_TEXT,
-                self.preview_calibration,
-                size_hint_y=None,
-                height=BUTTON_HEIGHT,
-            )
-        )
-        calibration_settings_card.add_widget(
-            self._button(
-                CALIBRATION_SETTINGS_CARD_SAVE_BUTTON_TEXT,
-                self.save_calibration,
-                size_hint_y=None,
-                height=BUTTON_HEIGHT,
-            )
-        )
-        calibration_manager_card.add_widget(calibration_settings_card)
+        calibration_header_card.add_widget(calibration_header_actions)
+        calibration_manager_view.add_widget(calibration_header_card)
+        calibration_manager_view.add_widget(calibration_manager_scroll)
 
         calibration_bias_card = Card(size_hint_y=None)
         calibration_bias_card.bind(minimum_height=calibration_bias_card.setter("height"))
         calibration_bias_card.add_widget(self._section_title(CALIBRATION_BIAS_CARD_TITLE_TEXT))
         calibration_bias_card.add_widget(self._small_label(CALIBRATION_BIAS_CARD_HELPER_TEXT))
+        self.dark_checkbox = CheckBox(active=calibration_config.apply_dark_subtraction)
+        self.dark_checkbox.bind(
+            active=lambda _instance, value: self._set_correction_enabled("apply_dark_subtraction", value)
+        )
+        calibration_bias_card.add_widget(self._checkbox_row(CALIBRATION_CARD_DARK_TEXT, self.dark_checkbox))
         self.bias_capture_count_input = TextInput(
             text=str(calibration_config.bias_capture_frame_count),
             multiline=False,
@@ -1691,6 +1626,12 @@ class DesktopSpectrometerApp(App):
         self._configure_text_input(self.dark_vector_input)
         self._register_multiline_editor(self.dark_vector_input)
         calibration_bias_card.add_widget(self.dark_vector_input)
+        calibration_bias_card.add_widget(self._small_label(
+            "Imported references need a timing identity. Assign the current profile only "
+            "if these references were acquired with the current firmware timing."))
+        calibration_bias_card.add_widget(self._button(
+            "Assign current timing to entered references", self.assign_reference_timing,
+            size_hint_y=None, height=BUTTON_HEIGHT))
         calibration_manager_card.add_widget(calibration_bias_card)
 
         calibration_wavelength_card = Card(size_hint_y=None)
@@ -1756,9 +1697,7 @@ class DesktopSpectrometerApp(App):
         self.calibration_plot_x_axis.set_plot_widget(self.calibration_plot)
         calibration_plot_shell.add_widget(self.calibration_plot_x_axis)
         calibration_wavelength_card.add_widget(calibration_plot_shell)
-        self.pixel_mapping_summary_label = self._info_label(
-            CALIBRATION_WAVELENGTH_SUMMARY_TEMPLATE.format(count=len(calibration_config.pixel_mapping_points))
-        )
+        self.pixel_mapping_summary_label = self._info_label(self._wavelength_fit_status(calibration_config))
         calibration_wavelength_card.add_widget(self.pixel_mapping_summary_label)
         self.pixel_mapping_input = TextInput(
             text=self._format_mapping_points(calibration_config.pixel_mapping_points),
@@ -1770,20 +1709,32 @@ class DesktopSpectrometerApp(App):
         self._configure_text_input(self.pixel_mapping_input)
         self._register_multiline_editor(self.pixel_mapping_input)
         calibration_wavelength_card.add_widget(self.pixel_mapping_input)
-        calibration_wavelength_card.add_widget(
-            self._button(
-                CALIBRATION_WAVELENGTH_FIT_BUTTON_TEXT,
-                self.fit_wavelength_coefficients_from_points,
-                size_hint_y=None,
-                height=BUTTON_HEIGHT,
-            )
+        calibration_wavelength_card.add_widget(self._small_label(CALIBRATION_WAVELENGTH_FIT_ORDER_TEXT))
+        wavelength_fit_row = BoxLayout(size_hint_y=None, height=BUTTON_HEIGHT, spacing=CARD_GAP)
+        self.wavelength_fit_order_input = TextInput(
+            text=str(calibration_config.wavelength_fit_order),
+            multiline=False,
+            size_hint=(0.3, None),
+            height=CONTROL_HEIGHT,
+            pos_hint={"center_y": 0.5},
         )
+        self._configure_text_input(self.wavelength_fit_order_input)
+        wavelength_fit_row.add_widget(self.wavelength_fit_order_input)
+        wavelength_fit_row.add_widget(
+            self._button(CALIBRATION_WAVELENGTH_FIT_BUTTON_TEXT, self.fit_wavelength_coefficients_from_points)
+        )
+        calibration_wavelength_card.add_widget(wavelength_fit_row)
         calibration_manager_card.add_widget(calibration_wavelength_card)
 
         calibration_flat_field_card = Card(size_hint_y=None)
         calibration_flat_field_card.bind(minimum_height=calibration_flat_field_card.setter("height"))
         calibration_flat_field_card.add_widget(self._section_title(CALIBRATION_FLAT_FIELD_CARD_TITLE_TEXT))
         calibration_flat_field_card.add_widget(self._small_label(CALIBRATION_FLAT_FIELD_CARD_HELPER_TEXT))
+        self.intensity_checkbox = CheckBox(active=calibration_config.apply_intensity_correction)
+        self.intensity_checkbox.bind(
+            active=lambda _instance, value: self._set_correction_enabled("apply_intensity_correction", value)
+        )
+        calibration_flat_field_card.add_widget(self._checkbox_row(CALIBRATION_CARD_INTENSITY_TEXT, self.intensity_checkbox))
         self.flat_field_summary_label = self._info_label(
             CALIBRATION_FLAT_FIELD_SUMMARY_TEMPLATE.format(count=len(calibration_config.intensity_correction))
         )
@@ -1804,6 +1755,11 @@ class DesktopSpectrometerApp(App):
         calibration_qe_card.bind(minimum_height=calibration_qe_card.setter("height"))
         calibration_qe_card.add_widget(self._section_title(CALIBRATION_QE_CARD_TITLE_TEXT))
         calibration_qe_card.add_widget(self._small_label(CALIBRATION_QE_CARD_HELPER_TEXT))
+        self.qe_checkbox = CheckBox(active=calibration_config.apply_quantum_efficiency_correction)
+        self.qe_checkbox.bind(
+            active=lambda _instance, value: self._set_correction_enabled("apply_quantum_efficiency_correction", value)
+        )
+        calibration_qe_card.add_widget(self._checkbox_row(CALIBRATION_CARD_QE_TEXT, self.qe_checkbox))
         self.qe_summary_label = self._info_label(
             CALIBRATION_QE_SUMMARY_TEMPLATE.format(count=len(calibration_config.quantum_efficiency_points))
         )
@@ -1831,7 +1787,9 @@ class DesktopSpectrometerApp(App):
         calibration_qe_card.add_widget(self.qe_points_input)
         calibration_manager_card.add_widget(calibration_qe_card)
 
-        self._calibration_manager_card = calibration_manager_scroll
+        self._calibration_manager_card = calibration_manager_view
+        self._calibration_scroll_content = calibration_manager_card
+        self._calibration_header_card = calibration_header_card
 
         display_manager_scroll = ScrollView(
             do_scroll_x=False,
@@ -1881,6 +1839,27 @@ class DesktopSpectrometerApp(App):
         self.graph_mode_spinner.font_size = f"{BODY_FONT_SP}sp"
         self.graph_mode_spinner.bind(text=self._on_graph_mode_spinner_change)
         display_graph_card.add_widget(self.graph_mode_spinner)
+        self.raw_view_spinner = Spinner(text="Processed spectrum", values=("Processed spectrum", "Raw ADC - full frame"),
+                                        size_hint_y=None, height=CONTROL_HEIGHT)
+        self.raw_view_spinner.bind(text=self._on_raw_view_change)
+        display_graph_card.add_widget(self.raw_view_spinner)
+
+        display_graph_card.add_widget(self._small_label(DISPLAY_MANAGER_SCALING_LABEL_TEXT))
+        self.normalization_mode_spinner = Spinner(
+            text=(
+                DISPLAY_MANAGER_SCALING_ABSOLUTE_TEXT
+                if calibration_config.display_normalization_mode == "absolute_saturation"
+                else DISPLAY_MANAGER_SCALING_AUTO_TEXT
+            ),
+            values=(DISPLAY_MANAGER_SCALING_ABSOLUTE_TEXT, DISPLAY_MANAGER_SCALING_AUTO_TEXT),
+            size_hint_y=None,
+            height=CONTROL_HEIGHT,
+            sync_height=True,
+            font_size=f"{BODY_FONT_SP}sp",
+        )
+        self.normalization_mode_spinner.bind(text=self._on_spectrum_scaling_change)
+        display_graph_card.add_widget(self.normalization_mode_spinner)
+
         display_graph_card.add_widget(self._small_label(DISPLAY_MANAGER_SPECTROGRAM_WINDOW_LABEL_TEXT))
         self.spectrogram_time_window_spinner = Spinner(
             text=self._spectrogram_time_window_display_text(
@@ -2117,52 +2096,76 @@ class DesktopSpectrometerApp(App):
 
         user_config_path = self._save_user_config_state()
         path = self.runtime.calibration_store.save(config)
-        self.runtime.command_service.apply_calibration_config(config, saved=True)
-        self._refresh_calibration_summaries(config)
+        self._apply_calibration_changes(config, saved=True)
         if user_config_path is None:
             self.set_notice(f"Saved calibration config to {path}.")
         else:
             self.set_notice(f"Saved calibration config to {path} and synced user config.")
 
-    def preview_calibration(self, *_args) -> None:
-        """Purpose: apply current calibration form settings to the live display. Rationale: toggles should visibly affect the plot immediately, even before saving."""
-        config = self._read_calibration_form()
-        if config is None:
-            return
+    def _set_correction_enabled(self, field: str, enabled: bool) -> None:
+        config = self.runtime.state_manager.get_calibration_config()
+        setattr(config, field, enabled)
+        self._apply_calibration_changes(config)
 
-        self.runtime.command_service.apply_calibration_config(config)
+    def _on_spectrum_scaling_change(self, _instance: Spinner, text: str) -> None:
+        config = self.runtime.state_manager.get_calibration_config()
+        config.display_normalization_mode = (
+            "absolute_saturation" if text == DISPLAY_MANAGER_SCALING_ABSOLUTE_TEXT else "auto_peak"
+        )
+        self._apply_calibration_changes(config)
+
+    def _apply_calibration_changes(self, config: CalibrationConfig, *, saved: bool = False) -> None:
+        self.runtime.command_service.apply_calibration_config(config, saved=saved)
         self._refresh_calibration_summaries(config)
+        # The rebuilt frame has the same ID and may have identical sampled values.
+        self._last_plot_signature = None
+        self._last_calibration_plot_signature = None
         self.refresh_view()
-        self.set_notice("Applied calibration changes to the live display.")
+
+    def assign_reference_timing(self, *_args) -> None:
+        current = self.runtime.state_manager.latest_spectrum()
+        if current is None or current.timing_profile_id is None:
+            self.set_notice("Receive a frame with known timing before assigning reference identity.")
+            return
+        config = self.runtime.state_manager.get_calibration_config()
+        try:
+            self._read_reference_terms(config)
+        except (ValueError, InvalidOperation):
+            self.set_notice("Check the bias and dark vectors and dark reference integration.")
+            return
+        if config.bias_counts:
+            config.bias_timing_profile_id = current.timing_profile_id
+        if config.dark_offset_counts:
+            config.dark_timing_profile_id = current.timing_profile_id
+        self._apply_calibration_changes(config)
+        self.set_notice(f"Assigned timing {current.timing_profile_id:08X}. Save calibration to retain it.")
 
     def capture_bias_reference(self, *_args) -> None:
         """Purpose: capture a master bias vector B_p from recent covered frames. Rationale: the calibration document's bias term should be acquired directly from blackout data inside the app."""
-        config = self._read_calibration_form()
-        if config is None:
+        assert self.bias_capture_count_input is not None and self.bias_vector_input is not None
+        try:
+            frame_count = max(int(self.bias_capture_count_input.text.strip() or "1"), 1)
+        except ValueError:
+            self.set_notice("Enter a whole number of frames to average for bias capture.")
             return
 
         buffered_frames = self.runtime.session_manager.frames()
-        frame_count = max(int(config.bias_capture_frame_count), 1)
-        selected_frames = [
-            frame.adc_counts
-            for frame in buffered_frames[-frame_count:]
-            if frame.adc_counts
-        ]
+        selected = [frame for frame in buffered_frames[-frame_count:] if frame.adc_counts]
+        if len({(frame.timing_profile_id, frame.integration_us) for frame in selected}) > 1:
+            self.set_notice("Bias capture spans different timing/exposure settings. Wait for a fresh covered buffer.")
+            return
+        selected_frames = [frame.adc_counts for frame in selected]
         if not selected_frames:
             self.set_notice("No buffered frames are available for B_p capture. Stream covered CCD frames first.")
             return
 
         bias_counts = self.runtime.calibration_manager.capture_bias_from_frames(selected_frames)
-        if self.bias_vector_input is not None:
-            self.bias_vector_input.text = self._format_float_vector(bias_counts)
-
-        updated = self._read_calibration_form()
-        if updated is None:
-            return
-
-        self.runtime.command_service.apply_calibration_config(updated)
-        self._refresh_calibration_summaries(updated)
-        self.refresh_view()
+        self.bias_vector_input.text = self._format_float_vector(bias_counts)
+        config = self.runtime.state_manager.get_calibration_config()
+        config.bias_capture_frame_count = frame_count
+        config.bias_counts = bias_counts
+        config.bias_timing_profile_id = selected[-1].timing_profile_id
+        self._apply_calibration_changes(config)
         self.set_notice(f"Captured B_p from {len(selected_frames)} buffered frame(s).")
 
     def start_guided_pixel_mapping(self, *_args) -> None:
@@ -2229,10 +2232,6 @@ class DesktopSpectrometerApp(App):
 
         self._cursor_sample_index = None
         self._cursor_sample_value = None
-        updated = self._read_calibration_form()
-        if updated is not None:
-            self.runtime.command_service.apply_calibration_config(updated)
-            self._refresh_calibration_summaries(updated)
         self._update_guided_pixel_mapping_status()
         self.refresh_view()
         self.set_notice(
@@ -2253,105 +2252,80 @@ class DesktopSpectrometerApp(App):
             self.laser_wavelengths_input.text = ""
         if self.pixel_mapping_input is not None:
             self.pixel_mapping_input.text = ""
-        if self.wavelength_input is not None:
-            self.wavelength_input.text = self._format_inline_coefficients(DEFAULT_WAVELENGTH_COEFFICIENTS)
         self._update_guided_pixel_mapping_status()
-        updated = self._read_calibration_form()
-        if updated is not None:
-            self.runtime.command_service.apply_calibration_config(updated)
-            self._refresh_calibration_summaries(updated)
-        self.refresh_view()
+        config = self.runtime.state_manager.get_calibration_config()
+        config.pixel_mapping_points = []
+        config.wavelength_coefficients = list(DEFAULT_WAVELENGTH_COEFFICIENTS)
+        self._apply_calibration_changes(config)
         self.set_notice("Guided pixel mapping reset and wavelength axis returned to pixels.")
 
     def fit_wavelength_coefficients_from_points(self, *_args) -> None:
-        """Purpose: fit wavelength coefficients from the entered pixel map. Rationale: the user should be able to move from line references to the polynomial map without leaving the calibration manager."""
-        config = self._read_calibration_form()
-        if config is None:
+        assert self.pixel_mapping_input is not None and self.wavelength_fit_order_input is not None
+        try:
+            points = self._parse_mapping_points(self.pixel_mapping_input.text)
+            fit_order = max(int(self.wavelength_fit_order_input.text.strip() or "0"), 0)
+        except ValueError:
+            self.set_notice("Check the wavelength reference points and enter a whole-number fit order.")
             return
-        if not config.pixel_mapping_points:
-            self.set_notice("Enter at least one pixel mapping point before fitting coefficients.")
+        if not points:
+            self.set_notice("Enter at least one pixel mapping point before fitting the wavelength map.")
             return
-
-        coefficients = self.runtime.calibration_manager.fit_wavelength_coefficients(
-            config.pixel_mapping_points,
-            fit_order=config.wavelength_fit_order,
-        )
-        if self.wavelength_input is not None:
-            self.wavelength_input.text = self._format_inline_coefficients(coefficients)
-
-        updated = self._read_calibration_form()
-        if updated is None:
-            return
-
-        self.runtime.command_service.apply_calibration_config(updated)
-        self._refresh_calibration_summaries(updated)
-        self.refresh_view()
-        self._update_guided_pixel_mapping_status()
-        self.set_notice(
-            f"Fitted {len(updated.wavelength_coefficients)} wavelength coefficient(s) from {len(updated.pixel_mapping_points)} mapping point(s)."
-        )
-
-    def _read_calibration_form(self) -> CalibrationConfig | None:
-        """Purpose: read the calibration controls into a config object. Rationale: preview and save should share one form-reading path."""
-        if (
-            self.wavelength_input is None
-            or self.wavelength_fit_order_input is None
-            or self.normalization_mode_spinner is None
-            or self.pixel_mapping_input is None
-            or self.bias_capture_count_input is None
-            or self.bias_vector_input is None
-            or self.dark_vector_input is None
-            or self.flat_field_input is None
-            or self.qe_points_input is None
-            or self.qe_normalization_input is None
-            or self.dark_checkbox is None
-            or self.intensity_checkbox is None
-            or self.qe_checkbox is None
-        ):
-            return None
 
         try:
-            coefficients = self._parse_float_vector(self.wavelength_input.text)
-            if not coefficients:
-                raise ValueError("missing coefficients")
-            fit_order = int(self.wavelength_fit_order_input.text.strip() or "0")
-            bias_capture_frame_count = int(self.bias_capture_count_input.text.strip() or "1")
-            bias_counts = self._parse_float_vector(self.bias_vector_input.text)
-            dark_counts = self._parse_float_vector(self.dark_vector_input.text)
-            dark_us = (parse_duration(self.dark_integration_input.text, "µs")
-                       if self.dark_integration_input.text.strip() else None)
-            flat_field = self._parse_float_vector(self.flat_field_input.text)
-            mapping_points = self._parse_mapping_points(self.pixel_mapping_input.text)
-            qe_points = self._parse_response_points(self.qe_points_input.text)
-            qe_normalization = (
-                float(self.qe_normalization_input.text.strip())
-                if self.qe_normalization_input.text.strip()
-                else None
+            coefficients = self.runtime.calibration_manager.fit_wavelength_coefficients(points, fit_order=fit_order)
+            if not all(isfinite(coefficient) for coefficient in coefficients):
+                raise ValueError("non-finite fit")
+        except (ValueError, np.linalg.LinAlgError):
+            self.set_notice("Could not fit the wavelength map. Check the reference points.")
+            return
+
+        config = self.runtime.state_manager.get_calibration_config()
+        config.pixel_mapping_points = points
+        config.wavelength_fit_order = fit_order
+        config.wavelength_coefficients = coefficients
+        self._apply_calibration_changes(config)
+        self.set_notice(f"Fit wavelength map from {len(points)} reference point(s). Save calibration to retain it.")
+
+    def _read_calibration_form(self) -> CalibrationConfig | None:
+        """Validate draft calibration entries before committing them."""
+        assert self.wavelength_fit_order_input is not None and self.pixel_mapping_input is not None
+        assert self.bias_capture_count_input is not None and self.flat_field_input is not None
+        assert self.qe_points_input is not None and self.qe_normalization_input is not None
+        config = self.runtime.state_manager.get_calibration_config()
+        try:
+            config.wavelength_fit_order = max(int(self.wavelength_fit_order_input.text.strip() or "0"), 0)
+            config.bias_capture_frame_count = max(int(self.bias_capture_count_input.text.strip() or "1"), 1)
+            self._read_reference_terms(config)
+            config.intensity_correction = self._parse_float_vector(self.flat_field_input.text)
+            config.quantum_efficiency_points = self._parse_response_points(self.qe_points_input.text)
+            normalization_text = self.qe_normalization_input.text.strip()
+            config.quantum_efficiency_normalization_wavelength_nm = (
+                self._parse_finite_float(normalization_text) if normalization_text else None
             )
+            mapping_points = self._parse_mapping_points(self.pixel_mapping_input.text)
         except (ValueError, InvalidOperation):
-            self.set_notice("One or more calibration entries could not be parsed. Check the coefficients, vectors, and point tables.")
+            self.set_notice("Check the calibration numbers, vectors, and point tables before saving.")
             return None
 
-        return ensure_pixel_mode_without_mapping(CalibrationConfig(
-            apply_dark_subtraction=bool(self.dark_checkbox.active),
-            apply_intensity_correction=bool(self.intensity_checkbox.active),
-            apply_quantum_efficiency_correction=bool(self.qe_checkbox.active),
-            display_normalization_mode=(
-                "absolute_saturation"
-                if self.normalization_mode_spinner.text == CALIBRATION_SETTINGS_CARD_NORMALIZATION_ABSOLUTE_TEXT
-                else "auto_peak"
-            ),
-            wavelength_coefficients=coefficients,
-            wavelength_fit_order=max(fit_order, 0),
-            pixel_mapping_points=mapping_points,
-            bias_capture_frame_count=max(bias_capture_frame_count, 1),
-            bias_counts=bias_counts,
-            dark_offset_counts=dark_counts,
-            dark_integration_us=dark_us,
-            intensity_correction=flat_field,
-            quantum_efficiency_points=qe_points,
-            quantum_efficiency_normalization_wavelength_nm=qe_normalization,
-        ))
+        if mapping_points and mapping_points != config.pixel_mapping_points:
+            self.set_notice("Fit the changed wavelength reference points before saving calibration.")
+            return None
+        config.pixel_mapping_points = mapping_points
+        return ensure_pixel_mode_without_mapping(config)
+
+    def _read_reference_terms(self, config: CalibrationConfig) -> None:
+        assert self.bias_vector_input is not None and self.dark_vector_input is not None
+        assert self.dark_integration_input is not None
+        bias_counts = self._parse_float_vector(self.bias_vector_input.text)
+        dark_counts = self._parse_float_vector(self.dark_vector_input.text)
+        integration_text = self.dark_integration_input.text.strip()
+        config.dark_integration_us = parse_duration(integration_text, "µs") if integration_text else None
+        if bias_counts != config.bias_counts:
+            config.bias_timing_profile_id = None
+        if dark_counts != config.dark_offset_counts:
+            config.dark_timing_profile_id = None
+        config.bias_counts = bias_counts
+        config.dark_offset_counts = dark_counts
 
     def export_session(self, *_args) -> None:
         if self._export_worker is not None:
@@ -2512,10 +2486,17 @@ class DesktopSpectrometerApp(App):
         self.refresh_plot()
         self.set_notice(f"Spectrogram time window set to {self._spectrogram_time_window_display_text(normalized_window_s)}.")
 
+    def _on_raw_view_change(self, _instance, text):
+        self.raw_adc_view = text.startswith("Raw ADC")
+        self._last_plot_signature = None
+        self.refresh_plot()
+
     def _live_plot_y_axis_labels(self) -> list[str]:
         """Purpose: return the current y-axis labels for the live plot area. Rationale: the line plot and spectrogram need different y-axis semantics."""
         if self._current_live_graph_mode() == LIVE_GRAPH_MODE_SPECTROGRAM:
             return self._spectrogram_time_axis_labels()
+        if self.raw_adc_view:
+            return [f"{tick_index * 4095 / (Y_AXIS_TICK_COUNT - 1):.0f}" for tick_index in range(Y_AXIS_TICK_COUNT)]
         return [f"{tick_index * Y_AXIS_TICK_INTERVAL:.1f}" for tick_index in range(Y_AXIS_TICK_COUNT)]
 
     def _spectrogram_source_frames(self) -> list[SpectrogramHistoryFrame]:
@@ -2896,7 +2877,8 @@ class DesktopSpectrometerApp(App):
             device_config = self.runtime.state_manager.get_user_config().device
             calibration_config = self.runtime.state_manager.get_calibration_config()
             expected_samples = device_config.sample_count
-            normalized_max = 1.0
+            raw_view = self.raw_adc_view and self._current_live_graph_mode() == LIVE_GRAPH_MODE_SPECTRUM
+            normalized_max = 4095.0 if raw_view else 1.0
             effective_start_default = device_config.effective_start_index
             effective_end_default = max(
                 effective_start_default + device_config.effective_sample_count - 1,
@@ -2913,15 +2895,15 @@ class DesktopSpectrometerApp(App):
                     "ui.latest_frame_age_ms",
                     max((datetime.now(timezone.utc) - spectrum.timestamp).total_seconds() * 1000.0, 0.0),
                 )
-                plot_source = spectrum.live_display_counts or spectrum.adc_counts
+                plot_source = spectrum.adc_counts if raw_view else (spectrum.live_display_counts or spectrum.adc_counts)
                 total_samples = len(plot_source)
                 full_frame_ready = total_samples >= expected_samples
 
                 if full_frame_ready:
                     # Only the effective CCD pixels are plotted for full frames, so
                     # dummy leading/trailing clocks do not dominate the display.
-                    start = spectrum.effective_start_index
-                    end = min(
+                    start = 0 if raw_view else spectrum.effective_start_index
+                    end = total_samples if raw_view else min(
                         start + spectrum.effective_sample_count,
                         total_samples,
                     )
@@ -2947,6 +2929,10 @@ class DesktopSpectrometerApp(App):
                         expected=expected_samples,
                     )
                     layout_text = SPECTRUM_CARD_LAYOUT_INCOMPLETE_TEMPLATE.format(total=total_samples)
+                profile = f"{spectrum.timing_profile_id:08X}" if spectrum.timing_profile_id is not None else "legacy/unknown"
+                stream_markup = (f"{'Raw ADC (all 3694 samples)' if raw_view else 'Processed spectrum'} | "
+                                 f"timing {profile} | {spectrum.integration_us} us\n{spectrum.reference_status}")
+                layout_text += " | Pixel alignment nominal; sensor-pin phase unverified"
             else:
                 monitor.increment("ui.refresh_plot_no_frame")
 
@@ -3507,6 +3493,12 @@ class DesktopSpectrometerApp(App):
         stack_connection_buttons = Window.width < BUTTON_STACK_BREAKPOINT
         stacked_side_panel_height = min(dp(320), max(dp(180), Window.height * 0.30))
         self._body.orientation = "vertical" if narrow_layout else "horizontal"
+        calibration_header = self._calibration_header_card
+        header_parent = self._calibration_scroll_content if narrow_layout else self._calibration_manager_card
+        if calibration_header is not None and header_parent is not None and calibration_header.parent is not header_parent:
+            calibration_header.parent.remove_widget(calibration_header)
+            # BoxLayout stores children in reverse display order.
+            header_parent.add_widget(calibration_header, index=len(header_parent.children))
         self._body.spacing = APP_GAP if self._side_panel_visible else 0
         side_panel_active = self._side_panel_visible
         self._left_scroll.size_hint_x = (1.0 if narrow_layout else SIDEBAR_RATIO_WIDE) if side_panel_active else None
@@ -3758,7 +3750,7 @@ class DesktopSpectrometerApp(App):
             ),
             "dark_reference": "Dark reference capture selected. Cover the sensor and acquire a baseline frame set.",
             "intensity_reference": "Intensity reference selected. Use an even illumination source and record a correction frame.",
-            "wavelength_review": "Wavelength review selected. Inspect the current coefficients and compare them to known peaks.",
+            "wavelength_review": "Wavelength review selected. Compare the fitted map to known peaks.",
         }
         self.set_notice(notices.get(action_key, f"{display_name} selected."))
 
@@ -3773,17 +3765,19 @@ class DesktopSpectrometerApp(App):
                 count=len(config.intensity_correction)
             )
         if self.pixel_mapping_summary_label is not None:
-            self.pixel_mapping_summary_label.text = CALIBRATION_WAVELENGTH_SUMMARY_TEMPLATE.format(
-                count=len(config.pixel_mapping_points)
-            )
+            self.pixel_mapping_summary_label.text = self._wavelength_fit_status(config)
         if self.qe_summary_label is not None:
             self.qe_summary_label.text = CALIBRATION_QE_SUMMARY_TEMPLATE.format(
                 count=len(config.quantum_efficiency_points)
             )
 
-    def _format_inline_coefficients(self, values: Sequence[float]) -> str:
-        """Purpose: format polynomial coefficients for the single-line coefficient field. Rationale: fitted wavelength terms should be easy to review and edit manually afterward."""
-        return ", ".join(f"{float(value):.9g}" for value in values)
+    @staticmethod
+    def _wavelength_fit_status(config: CalibrationConfig) -> str:
+        if not has_saved_wavelength_mapping(config):
+            return "Pixel mode (no active wavelength fit)"
+        degree = len(config.wavelength_coefficients) - 1
+        count = len(config.pixel_mapping_points)
+        return f"Wavelength fit active (degree {degree}, {count} reference points)"
 
     def _format_float_vector(self, values: Sequence[float], *, per_line: int = 8) -> str:
         """Purpose: format vector-style calibration data into a readable multiline string. Rationale: long correction arrays are easier to inspect when wrapped across lines."""
@@ -3793,27 +3787,34 @@ class DesktopSpectrometerApp(App):
         lines: list[str] = []
         for start in range(0, len(values), per_line):
             chunk = values[start : start + per_line]
-            lines.append(", ".join(f"{float(value):.9g}" for value in chunk))
+            lines.append(", ".join(repr(float(value)) for value in chunk))
         return "\n".join(lines)
 
     def _format_mapping_points(self, points: Sequence[PixelMappingPoint]) -> str:
         """Purpose: format pixel mapping references for the editor. Rationale: saved wavelength references should round-trip cleanly through the text form."""
         return "\n".join(
-            f"{float(point.pixel_index):.9g}, {float(point.wavelength_nm):.9g}"
+            f"{point.pixel_index!r}, {point.wavelength_nm!r}"
             for point in points
         )
 
     def _format_response_points(self, points: Sequence[SpectralResponsePoint]) -> str:
         """Purpose: format QE/response points for the editor. Rationale: wavelength/value pairs should be easy to paste in and edit line-by-line."""
         return "\n".join(
-            f"{float(point.wavelength_nm):.9g}, {float(point.relative_value):.9g}"
+            f"{point.wavelength_nm!r}, {point.relative_value!r}"
             for point in points
         )
 
     def _parse_float_vector(self, text: str) -> list[float]:
         """Purpose: parse a vector from comma-, newline-, or whitespace-separated text. Rationale: calibration arrays are often pasted from spreadsheets in different plain-text layouts."""
         cleaned = text.replace(",", " ").replace("\n", " ").replace("\t", " ")
-        return [float(part) for part in cleaned.split() if part.strip()]
+        return [self._parse_finite_float(part) for part in cleaned.split()]
+
+    @staticmethod
+    def _parse_finite_float(text: str) -> float:
+        value = float(text)
+        if not isfinite(value):
+            raise ValueError("non-finite calibration value")
+        return value
 
     def _parse_mapping_points(self, text: str) -> list[PixelMappingPoint]:
         """Purpose: parse pixel-to-wavelength reference pairs from the text editor. Rationale: wavelength calibration should accept simple copied tables from external notes or spreadsheets."""
@@ -3827,8 +3828,8 @@ class DesktopSpectrometerApp(App):
                 raise ValueError("invalid mapping row")
             points.append(
                 PixelMappingPoint(
-                    pixel_index=float(parts[0].strip()),
-                    wavelength_nm=float(parts[1].strip()),
+                    pixel_index=self._parse_finite_float(parts[0]),
+                    wavelength_nm=self._parse_finite_float(parts[1]),
                 )
             )
         return points
@@ -3845,8 +3846,8 @@ class DesktopSpectrometerApp(App):
                 raise ValueError("invalid response row")
             points.append(
                 SpectralResponsePoint(
-                    wavelength_nm=float(parts[0].strip()),
-                    relative_value=float(parts[1].strip()),
+                    wavelength_nm=self._parse_finite_float(parts[0]),
+                    relative_value=self._parse_finite_float(parts[1]),
                 )
             )
         return points

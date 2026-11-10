@@ -96,7 +96,35 @@ The TCD1304DG linear sensor produces a contiguous line of 3694 analog charge pac
 ADC and DMA Operational Flow
 ----------------------------
 
-1. **Triggering:** ``TIM2`` generates an internal TRGO event at each pixel interval. The trigger is timed to fire :math:`0.5\,\mu\text{s}` after the pixel transition, allowing the analog buffer amplifier to settle completely.
-2. **Quantization:** ``ADC1`` performs a 12-bit successive-approximation conversion in approximately :math:`0.25\,\mu\text{s}`, producing an unsigned integer value from 0 to 4095.
-3. **DMA Streaming:** ``DMA2_Stream0`` transfers each 16-bit halfword directly into the designated frame buffer in SRAM.
-4. **Completion:** Upon reaching 3694 transfers, the DMA controller triggers ``HAL_ADC_ConvCpltCallback``, which closes the active capture slot and disables TIM2 until the next frame boundary.
+**Requirement:** The Embedded acquisition system shall acquire one 12-bit
+sample per 2 us pixel period at 500 kS/s, with a 0.5 us initial trigger delay
+after ICG rise and a 15-cycle aperture at 24 MHz ADC clock, to retain one sample
+per nominal detector output.
+
+**Rationale:** The faster 1.333 MS/s diagnostic stream has multiple samples per
+pixel and cannot be substituted directly into the production pixel map. The
+longer production aperture provides more acquisition time for the analog source.
+
+**Context:** The projected hold instant follows the trigger by approximately
+0.719 us including internal trigger latency; analog settling remains unmeasured.
+
+**Requirement:** The Embedded acquisition system shall stop triggering at DMA
+completion IRQ entry and reject ADC overrun or DMA-error frames to prevent
+conversions beyond the buffer from being accepted as valid readout.
+
+**Rationale:** HAL dispatch latency can otherwise allow further ADC conversions
+after the final sample has exhausted the DMA transfer count.
+
+**Requirement:** The Embedded acquisition system shall arm the next frame in
+the preceding idle interval and skip frames when a safe arming deadline or buffer
+is unavailable to prevent a late start from shifting the pixel sequence.
+
+**Rationale:** The corrected 8 us ICG-low interval is shorter than a full HAL
+stop/start sequence, so acquisition cannot be rearmed at ICG fall.
+
+**Requirement:** The Embedded acquisition system shall discard the first
+capture following a timing reconfiguration to prevent mixed-exposure charge
+from being labeled with the new integration setting.
+
+**Rationale:** The first transferred line may contain charge accumulated under
+the preceding shutter schedule.

@@ -7,6 +7,11 @@ The repo has two active software areas:
 - `PythonGUI/`: the Python/Kivy desktop app for connecting to the spectrometer, plotting and calibrating live CCD data, and exporting recorded sessions as ZIP files.
 - `CCD-Driver-Code/STM32F411_Basic/`: the STM32F411 CubeIDE firmware project that clocks the CCD, captures ADC samples with DMA, and streams binary frames over USB CDC.
 
+`Spectrometer-Scope/` provides separate diagnostic firmware and a desktop scope
+for raw ADC/GPIO captures and datasheet timing checks. See
+[`Spectrometer-Scope/README.md`](Spectrometer-Scope/README.md) for build,
+flash backup/recovery, and acquisition instructions.
+
 Other top-level files include the STM32Cube project metadata, a PuTTY helper batch file, and project measurement/reference material.
 
 ## Quick Start

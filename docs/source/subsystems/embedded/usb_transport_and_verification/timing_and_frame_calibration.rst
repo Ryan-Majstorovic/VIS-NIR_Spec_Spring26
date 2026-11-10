@@ -71,13 +71,27 @@ To qualify detector driving waveforms, connect an oscilloscope with a bandwidth 
    * Measure pulse duty cycle. Confirm symmetry is :math:`50\% \pm 2\%`.
    * Measure 10%-to-90% rise and fall times. Confirm both are under :math:`20\,\text{ns}`.
 2. **Shift Gate (SH) Pulse Qualification:**
-   * Probe test point ``TP_SH`` (connected to PB0).
+   * Probe the detector SH input after the inverter driven by PA6.
    * Measure the positive pulse width at 50% voltage threshold. Confirm pulse width is :math:`6.00\,\mu\text{s} \pm 50\,\text{ns}`.
    * Verify that pulse duration remains invariant across different integration time settings.
 3. **Integration Clear Gate (ICG) Qualification:**
    * Probe test point ``TP_ICG`` (connected to PB6).
-   * Measure the positive readout pulse width. Confirm width is :math:`7.388\,\text{ms} \pm 2\,\mu\text{s}`.
-   * Verify that the SH pulse falls to ground before the falling edge of ICG to maintain valid charge transfer timing.
+   * Observe the sensor-side waveform after board inversion; MCU pad polarity is opposite.
+
+**Requirement:** The timing validation system shall measure detector ICG low
+for nominally 8 us and high for the remaining physical frame duration during
+production validation to confirm that the full 7388 us readout fits inside ICG high.
+
+**Rationale:** Readout duration and ICG-high duration are distinct; the former
+constant-high-window test would reject the corrected transfer sequence.
+
+**Requirement:** The timing validation system shall verify that ICG rises at
+least 1 us after SH falls, that SH rises 0.1 to 1 us after ICG falls, and that
+SH remains high at least 1 us during detector-pin qualification to validate
+datasheet t1, t2, and t3 against observed edges.
+
+**Rationale:** The earlier waveform raised ICG while SH was high, changing
+charge transfer despite plausible frame lengths and USB output.
 
 Frame Geometry and Baseline Verification Procedure
 --------------------------------------------------

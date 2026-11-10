@@ -672,13 +672,12 @@ Here is what happens during a normal frame capture:
 Here is what happens when calibration changes:
 
 1. The user opens `Calibration Manager`.
-2. The user edits toggles, vectors, mapping points, QE points, or normalization mode.
-3. `Preview Calibration` reads the form into a `CalibrationConfig`.
-4. `CommandService.apply_calibration_config(...)` normalizes pixel/wavelength mode and updates `CalibrationManager`.
-5. If a latest frame exists, `SpectrumBuilder.rebuild_live_frame(...)` rebuilds its processed display values.
-6. `StateManager` stores the updated frame and calibration config.
-7. `refresh_view()` updates the graph and summaries.
-8. `Save Calibration` writes the calibration JSON, syncs user config, and applies the saved calibration to subsequent recording frames.
+2. Correction toggles, spectrum scaling in `Display & Layout`, and explicit capture and fit actions update their fields in the active `CalibrationConfig`.
+3. `CommandService.apply_calibration_config(...)` normalizes pixel/wavelength mode and updates `CalibrationManager`.
+4. If a latest frame exists, `SpectrumBuilder.rebuild_live_frame(...)` rebuilds its processed display values.
+5. `StateManager` stores the updated frame and calibration config.
+6. `refresh_view()` updates the graph and summaries.
+7. `Save Calibration` validates and applies draft correction entries, writes the calibration JSON, and syncs user settings. Saved correction changes update subsequent recording frames, which use the spectrum scaling mode selected at recording start.
 
 ## Best Files To Read First
 

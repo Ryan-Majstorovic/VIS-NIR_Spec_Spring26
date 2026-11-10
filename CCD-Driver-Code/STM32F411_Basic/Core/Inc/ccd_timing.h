@@ -4,6 +4,9 @@
 #include <stdint.h>
 
 #define CCD_MIN_INTEGRATION_US 10U
+#define CCD_DEFAULT_INTEGRATION_US 100U
+#define CCD_ICG_LOW_US 8U
+#define CCD_TIMING_PROFILE_ID 0x00010001UL
 #define CCD_BASE_FRAME_US 8000U
 #define CCD_MAX_INTEGRATION_US 5000000U
 #define CCD_READOUT_US 7388U
@@ -48,8 +51,8 @@ static inline CcdTimingSegment CcdSegment(uint32_t us, uint32_t index, uint8_t s
   if (sh != 0U) {
     segment.ccr = index == 0U ? CCD_SH_HIGH_TICKS : 0U;
   } else {
-    /* PWM2 remains low when compare exceeds ARR; only the final segment reads out. */
-    segment.ccr = index + 1U == n ? (duration - CCD_READOUT_US) * 2U : duration * 2U;
+    /* Transfer once at frame start; keep ICG high across later segments. */
+    segment.ccr = index == 0U ? CCD_ICG_LOW_US * 2U : 0U;
   }
   return segment;
 }

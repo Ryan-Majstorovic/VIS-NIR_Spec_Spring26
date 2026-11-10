@@ -77,6 +77,12 @@ Normative Requirements
 Interactive Controls & Display Modes
 ------------------------------------
 
+.. _uuid-ab706fb5-82ee-49ce-b695-055a5281ad54:
+
+**Requirement:** The Host PC Visualization system shall provide the Spectrum scaling selector in Display & Layout under Live Graph and apply the selected mode immediately to the processed line spectrum.
+
+**Rationale:** The operator can switch between feature contrast and saturation headroom in the same menu as the graph and data-view controls.
+
 1. **Line Plot Normalization Modes:**
    * **Auto-Peak Mode:** Scales the y-axis dynamically to the peak value of the active frame, maximizing feature contrast.
    * **Absolute Saturation Mode:** Scales the y-axis against the full-scale ADC saturation ceiling, allowing operators to monitor headroom.

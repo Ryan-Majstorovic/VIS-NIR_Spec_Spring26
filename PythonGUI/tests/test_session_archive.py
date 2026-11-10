@@ -110,6 +110,31 @@ class SessionArchiveTests(unittest.TestCase):
                     [float(row[column]) for row in rows], handle[dataset][:].ravel(),
                 )
 
+    def test_recording_keeps_starting_spectrum_scaling_across_calibration_saves(self) -> None:
+        self.service.apply_calibration_config(self.initial.model_copy(update={"display_normalization_mode": "auto_peak"}))
+        self.assertTrue(self.service.start_binary_recording(self.capture).ok)
+        self._frame(1)
+        self.service.apply_calibration_config(self.initial)
+        self._frame(2)
+        self.service.apply_calibration_config(self.initial.model_copy(update={"intensity_correction": [2.0] * 4}), saved=True)
+        self._frame(3)
+        self.assertTrue(self.service.stop_binary_recording().ok)
+
+        with require_h5py().File(self.capture, "r") as handle:
+            self.assertEqual(handle["frame/calibration_revision"][:].tolist(), [0, 0, 1])
+            for revision in (0, 1):
+                config = json.loads(handle[f"calibration/revisions/{revision}/config_json"][()])
+                self.assertEqual(config["display_normalization_mode"], "auto_peak")
+            np.testing.assert_allclose(handle["processed/intensity"][:, 0], [1.0, 1.0, 1.0])
+
+        next_capture = self.capture.with_name("next.h5")
+        self.assertTrue(self.service.start_binary_recording(next_capture).ok)
+        self._frame(4)
+        self.assertTrue(self.service.stop_binary_recording().ok)
+        with require_h5py().File(next_capture, "r") as handle:
+            config = json.loads(handle["calibration/revisions/0/config_json"][()])
+            self.assertEqual(config["display_normalization_mode"], "absolute_saturation")
+
     def test_export_requires_a_stopped_recording_with_frames(self) -> None:
         self.assertFalse(self.service.export_session().ok)
         self.assertTrue(self.service.start_binary_recording(self.capture).ok)
