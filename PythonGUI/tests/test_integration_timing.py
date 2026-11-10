@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import struct
 import sys
 import tempfile
@@ -8,6 +9,7 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "PythonGUI"))
@@ -22,7 +24,8 @@ from backend.models.config import CalibrationConfig, DeviceConfig, UserConfig
 from backend.models.frames import BinaryFramePacket
 from backend.processing.calibration_manager import CalibrationManager
 from backend.processing.spectrum_builder import SpectrumBuilder
-from backend.storage.binary_capture import DenseBinaryRecorder, DenseFrameProcessor, export_hdf5_to_csv, require_h5py
+from backend.storage.binary_capture import DenseBinaryRecorder, DenseFrameProcessor, require_h5py
+from backend.storage.session_archive import export_session_archive
 
 
 def wire_frame(version=2, us=12500, frame_id=7):
@@ -168,8 +171,7 @@ class MetadataTests(unittest.TestCase):
             self.assertEqual(builder.build_from_frame(packet).dark_calibration_applied, expected)
             self.assertEqual(record.automatic_dark_bias_applied.tolist(), [50.0 if expected else 0.0] * 4)
 
-    def test_recording_csv_and_legacy_unknown_duration(self):
-        import csv
+    def test_recording_archive_and_legacy_unknown_duration(self):
         h5py = require_h5py()
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "timing.h5"
@@ -182,17 +184,33 @@ class MetadataTests(unittest.TestCase):
             self.assertFalse(recorder.status()["failed"])
             with h5py.File(path, "r") as handle:
                 self.assertEqual(handle["frame/integration_us"][:].tolist(), [0, 12500])
-            with export_hdf5_to_csv(path).open(newline="") as csv_file:
-                rows = list(csv.DictReader(csv_file))
-            self.assertEqual(rows[0]["integration_us"], "")
-            self.assertEqual(rows[4]["integration_us"], "12500")
+            with ZipFile(export_session_archive(path)) as archive:
+                timing = json.loads(archive.read("calibration.json"))["timing_ranges"]
+            self.assertEqual([entry["integration_us"] for entry in timing], [None, 12500])
+
             with h5py.File(path, "a") as handle:
-                del handle["frame/integration_us"]
-                del handle["frame/dark_calibration_applied"]
-                handle.attrs["format_version"] = "dense-hdf5-v1"
-            with export_hdf5_to_csv(path).open(newline="") as csv_file:
-                rows = list(csv.DictReader(csv_file))
-            self.assertTrue(all(row["integration_us"] == "" for row in rows))
+                revision = handle["calibration/revisions/0"]
+                handle.attrs["calibration_config_json"] = revision["config_json"].asstr()[()]
+                handle.create_group("correction")
+                for name in ("qe_correction", "system_response_correction", "correction_factor_applied"):
+                    handle.move(revision[name].name, f"correction/{name}")
+                handle.move(revision["wavelength_nm"].name, "pixel/wavelength_nm")
+                del handle["calibration"]
+                del handle["frame/calibration_revision"]
+                del handle["frame/timing_profile_id"]
+            for version in ("dense-hdf5-v3", "dense-hdf5-v2", "dense-hdf5-v1"):
+                with self.subTest(version=version):
+                    with h5py.File(path, "a") as handle:
+                        handle.attrs["format_version"] = version
+                        if version == "dense-hdf5-v1":
+                            del handle["frame/integration_us"]
+                            del handle["frame/dark_calibration_applied"]
+                    with ZipFile(export_session_archive(path)) as archive:
+                        manifest = json.loads(archive.read("calibration.json"))
+                    self.assertEqual(len(manifest["calibrations"]), 1)
+                    expected = [None] if version == "dense-hdf5-v1" else [None, 12500]
+                    self.assertEqual([entry["integration_us"] for entry in manifest["timing_ranges"]], expected)
+                    self.assertTrue(all(entry["timing_profile_id"] is None for entry in manifest["timing_ranges"]))
 
 
 if __name__ == "__main__":

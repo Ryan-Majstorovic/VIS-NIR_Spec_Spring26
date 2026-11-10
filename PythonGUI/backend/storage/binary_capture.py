@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import csv
 import json
 import queue
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence, TextIO
 
 import numpy as np
 
@@ -27,22 +26,16 @@ except ImportError:  # pragma: no cover - exercised only on machines missing the
     h5py = None
 
 
-FORMAT_VERSION = "dense-hdf5-v2"
+FORMAT_VERSION = "dense-hdf5-v4"
 DEFAULT_CHUNK_FRAMES = 128
 DEFAULT_QUEUE_CHUNKS = 4
-CSV_FLOAT_FORMAT = ".8g"
 CSV_COLUMNS = [
+    "frame_index",
     "frame_id",
     "timestamp_ns",
-    "integration_us",
-    "dark_calibration_applied",
     "sample_index",
-    "wavelength_nm",
     "raw_adc_count",
     "processed_adc_count",
-    "frame_dark_reference_count",
-    "automatic_dark_bias_applied",
-    "correction_factor_applied",
     "volts",
     "processed_intensity",
 ]
@@ -58,6 +51,13 @@ class StaticRecordingData:
 
 
 @dataclass(frozen=True, slots=True)
+class RecordingCalibration:
+    revision: int
+    config_json: str
+    static_data: StaticRecordingData
+
+
+@dataclass(frozen=True, slots=True)
 class DenseFrameRecord:
     frame_id: int
     timestamp_ns: int
@@ -68,6 +68,7 @@ class DenseFrameRecord:
     frame_dark_reference_count: np.ndarray
     automatic_dark_bias_applied: np.ndarray
     integration_us: int | None = None
+    timing_profile_id: int | None = None
     dark_calibration_applied: bool = False
 
 
@@ -176,6 +177,9 @@ class DenseFrameProcessor:
         self._correction_factor = correction_factor
         self._applied_bias_vector = self.bias_vector + self.dark_offset_vector
 
+    def recording_calibration(self, revision: int) -> RecordingCalibration:
+        return RecordingCalibration(revision, _config_to_json(self.calibration_config), self.static_data)
+
     def metadata_attributes(self) -> dict[str, Any]:
         return {
             "format_version": FORMAT_VERSION,
@@ -187,14 +191,9 @@ class DenseFrameProcessor:
             "adc_reference_volts": float(self.device_config.adc_reference_volts),
             "device_config_json": _config_to_json(self.device_config),
             "calibration_config_json": _config_to_json(self.calibration_config),
-            "apply_dark_subtraction": bool(self.calibration_config.apply_dark_subtraction),
-            "apply_intensity_correction": bool(self.calibration_config.apply_intensity_correction),
-            "apply_quantum_efficiency_correction": bool(self.calibration_config.apply_quantum_efficiency_correction),
-            "display_normalization_mode": self.calibration_config.display_normalization_mode,
             "frame_dark_start_index": FRAME_DARK_START_INDEX,
             "frame_dark_end_index": FRAME_DARK_END_INDEX,
             "precision_policy": "raw uint16 exact; derived arrays stored as float32; CSV derived fields formatted with .8g",
-            "correction_factor_storage": "static /correction/correction_factor_applied [P]",
         }
 
     def build_record(self, frame: FramePacket | BinaryFramePacket) -> DenseFrameRecord:
@@ -203,11 +202,14 @@ class DenseFrameProcessor:
 
         raw_u16 = np.asarray(frame.adc_counts, dtype=np.uint16)
         raw_counts = raw_u16.astype(np.float64, copy=False)
-        bias_corrected_raw = raw_counts - self.bias_vector
+        bias_vector = (self.bias_vector if frame.timing_profile_id == self.calibration_config.bias_timing_profile_id
+                       else np.zeros(self.pixel_count))
+        bias_corrected_raw = raw_counts - bias_vector
         dark_applied = bool(self.calibration_config.apply_dark_subtraction and
                             self.calibration_config.dark_offset_counts and
                             frame.integration_us is not None and
-                            frame.integration_us == self.calibration_config.dark_integration_us)
+                            frame.integration_us == self.calibration_config.dark_integration_us and
+                            frame.timing_profile_id == self.calibration_config.dark_timing_profile_id)
         dark_vector = self.dark_offset_vector if dark_applied else np.zeros(self.pixel_count)
 
         frame_dark_reference = 0.0
@@ -223,7 +225,7 @@ class DenseFrameProcessor:
         if self.calibration_config.apply_dark_subtraction:
             dark_corrected_raw = bias_corrected_raw - dark_vector
             light_counts = np.maximum(frame_dark_reference - dark_corrected_raw, LIVE_DISPLAY_CLIP_MIN)
-            saturated_bias_corrected_raw = -self.bias_vector
+            saturated_bias_corrected_raw = -bias_vector
             saturated_dark_corrected_raw = saturated_bias_corrected_raw - dark_vector
             saturation_light_counts = np.maximum(
                 frame_dark_reference - saturated_dark_corrected_raw,
@@ -231,7 +233,7 @@ class DenseFrameProcessor:
             )
         else:
             light_counts = np.maximum(self.full_scale_count - bias_corrected_raw, LIVE_DISPLAY_CLIP_MIN)
-            saturated_bias_corrected_raw = -self.bias_vector
+            saturated_bias_corrected_raw = -bias_vector
             saturation_light_counts = np.maximum(
                 self.full_scale_count - saturated_bias_corrected_raw,
                 MIN_NORMALIZATION_DENOMINATOR,
@@ -261,8 +263,9 @@ class DenseFrameProcessor:
             volts=volts.astype(np.float32),
             processed_intensity=intensity.astype(np.float32),
             frame_dark_reference_count=np.full(self.pixel_count, frame_dark_reference, dtype=np.float32),
-            automatic_dark_bias_applied=(self.bias_vector + dark_vector).astype(np.float32),
+            automatic_dark_bias_applied=(bias_vector + dark_vector).astype(np.float32),
             integration_us=frame.integration_us,
+            timing_profile_id=frame.timing_profile_id,
             dark_calibration_applied=dark_applied,
         )
 
@@ -282,8 +285,14 @@ class DenseBinaryRecorder:
         self.path = Path(path)
         self.static_data = static_data
         self.metadata_attributes = dict(metadata_attributes)
+        self._initial_calibration = RecordingCalibration(
+            0, self.metadata_attributes.pop("calibration_config_json"), static_data,
+        )
         self.chunk_frames = max(int(chunk_frames), 1)
-        self._queue: queue.Queue[DenseFrameRecord | None] = queue.Queue(maxsize=self.chunk_frames * max(int(queue_chunks), 1))
+        self._queue: queue.Queue[tuple[DenseFrameRecord, RecordingCalibration]] = queue.Queue(
+            maxsize=self.chunk_frames * max(int(queue_chunks), 1),
+        )
+        self._stop_requested = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._active = False
@@ -295,6 +304,7 @@ class DenseBinaryRecorder:
         require_h5py()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
+            self._stop_requested.clear()
             self._active = True
             self._failed = False
             self._failure_message = None
@@ -302,26 +312,23 @@ class DenseBinaryRecorder:
         self._thread = threading.Thread(target=self._run, name="dense-binary-writer", daemon=True)
         self._thread.start()
 
-    def append(self, record: DenseFrameRecord) -> bool:
+    def append(self, record: DenseFrameRecord, calibration: RecordingCalibration | None = None) -> bool:
         with self._lock:
-            if not self._active or self._failed:
+            if not self._active or self._failed or self._stop_requested.is_set():
                 return False
-        try:
-            self._queue.put_nowait(record)
-        except queue.Full:
-            self._mark_failed("Dense binary recording queue filled. Recording failed rather than dropping a frame.")
-            return False
+            try:
+                self._queue.put_nowait((record, calibration or self._initial_calibration))
+            except queue.Full:
+                self._failed = True
+                self._failure_message = "Dense binary recording queue filled. Recording failed rather than dropping a frame."
+                return False
         return True
 
     def stop(self) -> None:
         with self._lock:
-            was_active = self._active
-        if was_active:
-            self._queue.put(None)
+            self._stop_requested.set()
         if self._thread is not None:
             self._thread.join()
-        with self._lock:
-            self._active = False
 
     def queue_depth(self) -> int:
         return self._queue.qsize()
@@ -347,22 +354,31 @@ class DenseBinaryRecorder:
 
     def _run(self) -> None:
         batch: list[DenseFrameRecord] = []
+        revisions: list[int] = []
+        last_revision = -1
         try:
             h5 = require_h5py()
             with h5.File(self.path, "w") as handle:
                 for key, value in self.metadata_attributes.items():
                     handle.attrs[key] = value
                 datasets = self._create_datasets(handle)
-                while True:
-                    record = self._queue.get()
-                    if record is None:
-                        if batch:
-                            self._flush_records(datasets, batch)
-                        break
+                calibration_group = handle.require_group("calibration/revisions")
+                while not (self._stop_requested.is_set() and self._queue.empty()):
+                    try:
+                        record, calibration = self._queue.get(timeout=0.1)
+                    except queue.Empty:
+                        continue
+                    if calibration.revision != last_revision:
+                        self._write_calibration(calibration_group, calibration)
+                        last_revision = calibration.revision
                     batch.append(record)
+                    revisions.append(calibration.revision)
                     if len(batch) >= self.chunk_frames:
-                        self._flush_records(datasets, batch)
-                        batch = []
+                        self._flush_records(datasets, batch, revisions)
+                        batch.clear()
+                        revisions.clear()
+                if batch:
+                    self._flush_records(datasets, batch, revisions)
         except Exception as exc:  # pragma: no cover - depends on filesystem/HDF5 failures.
             self._mark_failed(str(exc))
         finally:
@@ -376,18 +392,15 @@ class DenseBinaryRecorder:
         raw_group = handle.require_group("raw")
         processed_group = handle.require_group("processed")
         dark_group = handle.require_group("dark")
-        correction_group = handle.require_group("correction")
 
         pixel_group.create_dataset("sample_index", data=self.static_data.sample_indices, dtype=np.int32)
-        pixel_group.create_dataset("wavelength_nm", data=self.static_data.wavelengths_nm, dtype=np.float32)
-        correction_group.create_dataset("qe_correction", data=self.static_data.qe_correction, dtype=np.float32)
-        correction_group.create_dataset("system_response_correction", data=self.static_data.system_response_correction, dtype=np.float32)
-        correction_group.create_dataset("correction_factor_applied", data=self.static_data.correction_factor_applied, dtype=np.float32)
 
         frame_chunks = (self.chunk_frames,)
         dense_chunks = (self.chunk_frames, pixel_count)
         return {
             "frame_id": frame_group.create_dataset("frame_id", shape=(0,), maxshape=(None,), chunks=frame_chunks, dtype=np.uint64),
+            "calibration_revision": frame_group.create_dataset("calibration_revision", shape=(0,), maxshape=(None,), chunks=frame_chunks, dtype=np.uint32),
+            "timing_profile_id": frame_group.create_dataset("timing_profile_id", shape=(0,), maxshape=(None,), chunks=frame_chunks, dtype=np.uint32),
             "integration_us": frame_group.create_dataset("integration_us", shape=(0,), maxshape=(None,), chunks=frame_chunks, dtype=np.uint32),
             "dark_calibration_applied": frame_group.create_dataset("dark_calibration_applied", shape=(0,), maxshape=(None,), chunks=frame_chunks, dtype=np.bool_),
             "timestamp_ns": frame_group.create_dataset("timestamp_ns", shape=(0,), maxshape=(None,), chunks=frame_chunks, dtype=np.int64),
@@ -399,7 +412,18 @@ class DenseBinaryRecorder:
             "automatic_dark_bias_applied": dark_group.create_dataset("automatic_dark_bias_applied", shape=(0, pixel_count), maxshape=(None, pixel_count), chunks=dense_chunks, dtype=np.float32),
         }
 
-    def _flush_records(self, datasets: dict[str, Any], records: Sequence[DenseFrameRecord]) -> None:
+    @staticmethod
+    def _write_calibration(group: Any, calibration: RecordingCalibration) -> None:
+        revision = group.create_group(str(calibration.revision))
+        revision.create_dataset("config_json", data=calibration.config_json)
+        revision.create_dataset("wavelength_nm", data=calibration.static_data.wavelengths_nm)
+        revision.create_dataset("qe_correction", data=calibration.static_data.qe_correction)
+        revision.create_dataset("system_response_correction", data=calibration.static_data.system_response_correction)
+        revision.create_dataset("correction_factor_applied", data=calibration.static_data.correction_factor_applied)
+
+    def _flush_records(
+        self, datasets: dict[str, Any], records: Sequence[DenseFrameRecord], revisions: Sequence[int],
+    ) -> None:
         count = len(records)
         if count <= 0:
             return
@@ -415,6 +439,8 @@ class DenseBinaryRecorder:
                 dataset.resize((stop, dataset.shape[1]))
 
         datasets["frame_id"][start:stop] = np.asarray([record.frame_id for record in records], dtype=np.uint64)
+        datasets["calibration_revision"][start:stop] = revisions
+        datasets["timing_profile_id"][start:stop] = np.asarray([record.timing_profile_id or 0 for record in records], dtype=np.uint32)
         datasets["integration_us"][start:stop] = np.asarray([record.integration_us or 0 for record in records], dtype=np.uint32)
         datasets["dark_calibration_applied"][start:stop] = [record.dark_calibration_applied for record in records]
         datasets["timestamp_ns"][start:stop] = np.asarray([record.timestamp_ns for record in records], dtype=np.int64)
@@ -426,68 +452,53 @@ class DenseBinaryRecorder:
         datasets["automatic_dark_bias_applied"][start:stop, :] = np.stack([record.automatic_dark_bias_applied for record in records])
 
 
+def write_frame_csv(
+    handle: Any,
+    csv_handle: TextIO,
+    *,
+    chunk_frames: int = DEFAULT_CHUNK_FRAMES,
+    on_frames_written: Callable[[int], None] | None = None,
+) -> None:
+    frame_ids = handle["frame/frame_id"]
+    timestamps = handle["frame/timestamp_ns"]
+    sample_indices = handle["pixel/sample_index"][:].tolist()
+    measurements = (
+        handle["raw/adc_count"],
+        handle["processed/adc_count"],
+        handle["processed/volts"],
+        handle["processed/intensity"],
+    )
+    frame_count = len(frame_ids)
+    if timestamps.shape != frame_ids.shape or any(
+        dataset.shape != (frame_count, len(sample_indices)) for dataset in measurements
+    ):
+        raise ValueError("Recording contains misaligned frame data.")
+
+    csv_handle.write(",".join(CSV_COLUMNS) + "\r\n")
+    chunk_frames = max(int(chunk_frames), 1)
+    for start in range(0, frame_count, chunk_frames):
+        stop = min(start + chunk_frames, frame_count)
+        measurement_chunks = [dataset[start:stop] for dataset in measurements]
+        for offset, (frame_id, timestamp) in enumerate(zip(frame_ids[start:stop], timestamps[start:stop], strict=True)):
+            frame_index = start + offset
+            # All fields are numeric. Format a whole frame before writing to the ZIP stream.
+            row_format = f"{frame_index},{frame_id},{timestamp},%d,%d,%.8g,%.8g,%.8g\r\n"
+            samples = zip(sample_indices, *(chunk[offset].tolist() for chunk in measurement_chunks), strict=True)
+            csv_handle.write("".join(row_format % sample for sample in samples))
+            if on_frames_written is not None:
+                on_frames_written(frame_index + 1)
+
+
 def export_hdf5_to_csv(hdf5_path: Path, csv_path: Path | None = None, *, chunk_frames: int = DEFAULT_CHUNK_FRAMES) -> Path:
     h5 = require_h5py()
     source_path = Path(hdf5_path)
     output_path = Path(csv_path) if csv_path is not None else source_path.with_suffix(".csv")
+    if output_path.resolve() == source_path.resolve():
+        raise ValueError("CSV output must differ from the source recording.")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with h5.File(source_path, "r") as handle, output_path.open("w", newline="", encoding="utf-8") as csv_handle:
-        writer = csv.writer(csv_handle)
-        writer.writerow(CSV_COLUMNS)
-
-        frame_ids = handle["frame/frame_id"]
-        timestamp_ns = handle["frame/timestamp_ns"]
-        sample_indices = handle["pixel/sample_index"][:]
-        wavelengths_nm = handle["pixel/wavelength_nm"][:]
-        raw_adc = handle["raw/adc_count"]
-        processed_adc = handle["processed/adc_count"]
-        volts = handle["processed/volts"]
-        intensity = handle["processed/intensity"]
-        frame_dark = handle["dark/frame_dark_reference_count"]
-        automatic_bias = handle["dark/automatic_dark_bias_applied"]
-        correction_dataset = handle["correction/correction_factor_applied"]
-        correction_static = correction_dataset[:] if correction_dataset.ndim == 1 else None
-
-        total_frames = int(frame_ids.shape[0])
-        pixel_count = int(sample_indices.shape[0])
-        for start in range(0, total_frames, max(int(chunk_frames), 1)):
-            stop = min(start + max(int(chunk_frames), 1), total_frames)
-            frame_id_chunk = frame_ids[start:stop]
-            timestamp_chunk = timestamp_ns[start:stop]
-            integration_chunk = (handle["frame/integration_us"][start:stop]
-                                 if "frame/integration_us" in handle else np.zeros(stop - start, dtype=np.uint32))
-            dark_applied_chunk = (handle["frame/dark_calibration_applied"][start:stop]
-                                  if "frame/dark_calibration_applied" in handle else None)
-            raw_chunk = raw_adc[start:stop, :]
-            processed_chunk = processed_adc[start:stop, :]
-            volts_chunk = volts[start:stop, :]
-            intensity_chunk = intensity[start:stop, :]
-            frame_dark_chunk = frame_dark[start:stop, :]
-            automatic_bias_chunk = automatic_bias[start:stop, :]
-            correction_chunk = correction_dataset[start:stop, :] if correction_static is None else None
-
-            for frame_offset in range(stop - start):
-                correction_row = correction_static if correction_static is not None else correction_chunk[frame_offset]
-                for pixel_index in range(pixel_count):
-                    writer.writerow(
-                        [
-                            int(frame_id_chunk[frame_offset]),
-                            int(timestamp_chunk[frame_offset]),
-                            int(integration_chunk[frame_offset]) or "",
-                            bool(dark_applied_chunk[frame_offset]) if dark_applied_chunk is not None else "",
-                            int(sample_indices[pixel_index]),
-                            format(float(wavelengths_nm[pixel_index]), CSV_FLOAT_FORMAT),
-                            int(raw_chunk[frame_offset, pixel_index]),
-                            format(float(processed_chunk[frame_offset, pixel_index]), CSV_FLOAT_FORMAT),
-                            format(float(frame_dark_chunk[frame_offset, pixel_index]), CSV_FLOAT_FORMAT),
-                            format(float(automatic_bias_chunk[frame_offset, pixel_index]), CSV_FLOAT_FORMAT),
-                            format(float(correction_row[pixel_index]), CSV_FLOAT_FORMAT),
-                            format(float(volts_chunk[frame_offset, pixel_index]), CSV_FLOAT_FORMAT),
-                            format(float(intensity_chunk[frame_offset, pixel_index]), CSV_FLOAT_FORMAT),
-                        ]
-                    )
-
+        write_frame_csv(handle, csv_handle, chunk_frames=chunk_frames)
     return output_path
 
 

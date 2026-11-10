@@ -35,9 +35,9 @@ The following requirements are limited to technical instrument behavior.
      - Host processing modules, calibration config, and host-PC calibration
        documentation.
    * - Export
-     - CSV rows include raw ADC counts, processed counts, wavelengths, volts,
-       and processed intensity.
-     - ``PythonGUI/backend/storage/export_csv.py``.
+     - :doc:`HDF5 capture and session ZIP requirements
+       <subsystems/host_pc/operator_application/export_initiation_and_session_retention>`.
+     - ``PythonGUI/tests/test_session_archive.py``.
    * - Characterization
      - Wavelength accuracy, FWHM, SNR, linearity, repeatability, stray light,
        and reference comparison.

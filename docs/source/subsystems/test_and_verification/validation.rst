@@ -41,10 +41,12 @@ measurement.
    spectral-response/QE selections are visible, and missing or incompatible
    inputs are not silently activated.
 
-**Step 6:** Initiate CSV export for the retained session.
+**Step 6:** Stop a recording with frames, select Export Session, and choose
+a ZIP destination in the Windows Save As dialog.
 
-   **Expected Outcome:** The planned export contains raw ADC counts, processed
-   counts, wavelength, volts, and processed intensity with row correspondence.
+   **Expected Outcome:** The ZIP contains ``frames.csv`` with raw ADC counts,
+   processed counts, volts, and processed intensity. ``calibration.json``
+   contains calibration and timing ranges that join to the CSV by frame index.
 
 **Step 7:** Review the resulting spectrum and the verification evidence record.
 

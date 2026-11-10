@@ -91,15 +91,12 @@ class BinaryCaptureCsvTests(unittest.TestCase):
 
             self.assertEqual(list(rows[0].keys()), CSV_COLUMNS)
             self.assertEqual(len(rows), 8)
+            self.assertEqual([row["frame_index"] for row in rows], ["0"] * 4 + ["1"] * 4)
             self.assertEqual([int(row["raw_adc_count"]) for row in rows[:4]], raw_frames[0].tolist())
             self.assertEqual([int(row["raw_adc_count"]) for row in rows[4:]], raw_frames[1].tolist())
 
             derived_columns = [
-                "wavelength_nm",
                 "processed_adc_count",
-                "frame_dark_reference_count",
-                "automatic_dark_bias_applied",
-                "correction_factor_applied",
                 "volts",
                 "processed_intensity",
             ]

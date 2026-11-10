@@ -1,76 +1,53 @@
 Session Control
 ===============
 
-The Session Control system provides the operator-facing workflow for managing measurement sessions. It coordinates user-initiated recording boundaries, circular in-memory buffer sizing, session reset operations, and session metadata tracking.
+Session Control covers the operator's recording workflow and the rolling
+buffers used by live display and bias capture.
 
 .. _uuid-a3b4c5d6-e7f8-49a0-b1c2-334455667701:
-
-Subsystem Scope & Workflow
---------------------------
-
-UUID: :ref:`A3B4C5D6-E7F8-49A0-B1C2-334455667701 <uuid-a3b4c5d6-e7f8-49a0-b1c2-334455667701>`
-
-This stage governs the **operator workflow session**, maintaining clean separation from the lower-level transport stream:
-* **Workflow Boundaries:** The operator can begin a measurement run, clear active history, or freeze buffers for export analysis.
-* **Bounded In-Memory Retention:** Implements a thread-safe circular buffer (default 500 frames) that retains complete ``SpectrumFrame`` objects for instant CSV export without risking system memory exhaustion.
-
-Inputs and Outputs
-------------------
-
-.. list-table::
-   :header-rows: 1
-
-   * - Flow
-     - Name
-     - Structure / Type
-     - Description
-   * - **Input**
-     - User Actions
-     - UI Events
-     - Reset Session, Export CSV, Start/Stop Recording button clicks.
-   * - **Input**
-     - UI Configuration
-     - ``UIConfig``
-     - Configurable buffer depth (``max_session_frames``, default 500).
-   * - **Output**
-     - Session Status
-     - ``SessionStatus``
-     - Session ID, start time, buffered frame count, and last export file path.
-   * - **Output**
-     - Buffered Frames
-     - ``deque[SpectrumFrame]``
-     - Time-ordered buffer of recent full measurement frames.
 
 Normative Requirements
 ----------------------
 
 .. _uuid-a3b4c5d6-e7f8-49a0-b1c2-334455667702:
 
-**Requirement:** The Host PC Session Control system shall maintain a thread-safe circular buffer that retains up to ``max_session_frames`` (default 500 frames) of complete ``SpectrumFrame`` records in memory.
+**Requirement:** The Host PC Session Control system shall retain up to
+``max_session_frames`` complete recent frames in a thread-safe circular buffer
+for bias capture and shall retain compact spectrogram rows for the rolling
+display.
 
-   **Rationale:** Retaining a bounded circular buffer in memory provides instant access to recent capture history for CSV export while preventing unbounded RAM growth during continuous streaming.
+**Rationale:** Recent covered frames support master bias capture. Bounded
+retention limits memory use during continuous streaming.
 
-.. _uuid-a3b4c5d6-e7f8-49a0-b1c2-334455667703:
+.. _uuid-a3b4c5d6-e7f8-49a0-b1c2-334455667705:
 
-**Requirement:** The Host PC Session Control system shall generate a unique session identifier and initialize a new UTC start timestamp upon receiving a Session Reset request.
+**Requirement:** The Host PC Operator Application shall expose integration time,
+a recording button, and Export Session in the Integration and Recording card
+and shall honor its saved visibility setting. The recording button shall show
+Stop Binary Recording during an active recording and Start Binary Recording
+when idle, with the button disabled during export.
 
-   **Rationale:** Unique session identifiers prevent data records and export files from different experimental runs from being conflated.
+**Rationale:** Keeping acquisition settings and capture actions together lets
+the operator control a measurement run without losing their display layout.
+The button label identifies the action available for the current recording state.
 
-.. _uuid-a3b4c5d6-e7f8-49a0-b1c2-334455667704:
+.. _uuid-a3b4c5d6-e7f8-49a0-b1c2-334455667706:
 
-**Requirement:** The Host PC Session Control system shall atomically clear in-memory capture buffers, reset spectrogram history textures, and reset dropped frame counters when a Session Reset is triggered.
+**Requirement:** The Host PC Session Control system shall finalize accepted
+frames to the HDF5 file when the operator stops recording and shall enable
+Export Session when the latest recording has finalized successfully and
+contains at least one frame.
 
-   **Rationale:** Atomic clearing guarantees that old measurement data does not bleed into the newly initiated acquisition run.
+**Rationale:** A finalized source keeps export from reading frames that are
+still being written, and the frame check ensures the archive contains
+measurement data.
 
-Session Workflow & Actions
---------------------------
+Verification
+------------
 
-* **Session Reset:** Clears in-memory frame queues, resets spectrogram textures, resets missed frame counters, and assigns a new session UUID.
-* **Buffer Size Configuration:** The operator can adjust ``max_session_frames`` via user settings to allocate larger or smaller memory buffers based on available host RAM.
-* **Session Status Card:** Displays active session ID, elapsed session time, total frames captured, and last exported CSV filename.
-
-Verification & Testing
-----------------------
-
-* **Circular Buffer Cap Check:** Stream 1000 frames into a buffer configured for 500 frames; verify that exactly 500 frames are retained and that the oldest 500 frames were purged in FIFO order.
-* **Reset Atomicity Check:** Trigger a reset while streaming; verify that the buffered count immediately drops to 0 and that the subsequent frame carries the new session identifier.
+* Check that the integration controls and recording actions fit at wide and
+  narrow window sizes.
+* Stream beyond the configured buffer depth and verify that the newest frames
+  remain available for bias capture.
+* Check Export Session before recording, during recording, after stopping an
+  empty recording, and after successfully stopping a recording with frames.

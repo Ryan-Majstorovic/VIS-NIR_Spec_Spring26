@@ -13,7 +13,7 @@ This folder contains the desktop-side pipeline:
 - applying the live calibration pipeline for display values
 - maintaining rolling session and spectrogram-history buffers
 - recording full-rate dense HDF5 binary captures
-- exporting captured frames to CSV
+- exporting completed recordings as ZIP files with frame data and calibration history
 - drawing either a live line spectrum or a rolling spectrogram
 - providing calibration, display/layout, diagnostics, and performance tools
 
@@ -77,10 +77,10 @@ Here is the big picture of the folder:
 - `backend/core/`: application services, runtime wiring, state, sessions, commands, and performance metrics
 - `backend/device/`: serial transport and packet parsing
 - `backend/processing/`: ADC conversion, calibration, wavelength, and spectrogram helpers
-- `backend/storage/`: config loading/saving and CSV export
+- `backend/storage/`: config files, HDF5 capture, and session ZIP export
 - `configs/`: default settings files
 - `logs/`: runtime logs written while the app is running
-- `exports/`: CSV exports created at runtime
+- `exports/`: HDF5 recordings and session ZIP files created at runtime
 
 For the detailed file-by-file walkthrough, read:
 
@@ -115,7 +115,7 @@ Once the user presses `Connect`, data moves through the program like this:
 9. `CommandService._process_packet(...)` updates frame counters, missed-frame counters, logs, and state.
 10. `SpectrumBuilder.build_from_frame(...)` builds a `SpectrumFrame` with raw samples, processed live display values, and a compressed spectrogram row.
 11. `StateManager` stores the latest status and newest spectrum frame.
-12. `SessionManager` appends the full frame to the export buffer and the compact row to the spectrogram-history buffer.
+12. `SessionManager` keeps the full frame for bias capture and the compact row for the spectrogram.
 13. The Kivy UI polls the latest state on timers and redraws the selected graph mode.
 
 ## What Runs Separately
@@ -125,8 +125,8 @@ Several parts run independently so the graph stays responsive while data keeps a
 - The main Kivy UI thread owns the window, buttons, labels, graph widgets, and refresh timers.
 - The serial reader thread inside `SerialTransport` only reads USB CDC bytes and emits callbacks.
 - The packet processor thread inside `CommandService` parses chunks and updates backend state.
-- The session manager keeps bounded rolling buffers for full-frame export data and compact spectrogram rows.
-- CSV export runs only when the user asks to save the buffered session.
+- The session manager keeps bounded rolling buffers for bias capture and the spectrogram.
+- The HDF5 writer saves full-rate measurements, and a separate worker exports the completed capture.
 
 This split keeps USB reads, binary packet rebuilding, calibration processing, UI painting, and file output from blocking each other unnecessarily.
 
@@ -138,7 +138,7 @@ The side panel includes:
 
 - `Connection`: COM-port refresh, connect/disconnect, and live-display pause/resume
 - `Tools`: buttons for the calibration manager and display/layout manager
-- `Session And Commands`: raw USB CDC command entry, CSV export, and session reset
+- `Integration and Recording`: integration time, recording start and stop, and session export
 - `Frame Data`: frame, layout, edge-sample, refresh-rate, session, and cursor readouts
 - `Performance`: optional timing and throughput report
 - `Diagnostics`: recent log messages
@@ -153,7 +153,7 @@ The main display can show:
 ## Calibration Pipeline
 
 The live graph is no longer a raw-only ADC plot.
-`SpectrumBuilder` stores raw ADC counts for export and debugging, but the visible line spectrum uses the current processed display signal when available.
+`SpectrumBuilder` retains raw ADC counts for bias capture and diagnostics. The visible line spectrum uses the current processed display signal when available.
 
 The processing path is:
 
@@ -168,30 +168,22 @@ The processing path is:
 9. Normalize the display either by absolute saturation reference or per-frame auto peak.
 10. Compress a stable 0-to-1 row for the rolling spectrogram.
 
-CSV export writes both raw and derived columns:
+## HDF5 Capture and Session Export
 
-- `raw_adc_count`
-- `processed_adc_count`
-- `frame_dark_reference_count`
-- `wavelength_nm`
-- `volts`
-- `processed_intensity`
+1. In **Integration and Recording**, click **Start Binary Recording**. The app writes full-rate measurements to `exports/spectrometer_capture_*.h5` using the last saved calibration.
+2. Use **Save Calibration** to apply a change to subsequent recorded frames. Calibration previews affect the live display.
+3. Click **Stop Binary Recording**, then **Export Session**. Choose a folder and filename in the Windows Save As dialog. The status bar shows the export percentage and reports the ZIP path when it is ready.
 
-## Dense Binary Capture
+The ZIP contains two entries.
 
-The side-panel `Session And Commands` card includes:
+- `frames.csv` contains one row per sample with `frame_index`, `frame_id`, `timestamp_ns`, `sample_index`, `raw_adc_count`, `processed_adc_count`, `volts`, and `processed_intensity`.
+- `calibration.json` contains detector and ADC settings, wavelength mapping and correction vectors for each revision, and separate `calibration_ranges` and `timing_ranges` lists. Join both lists to `frames.csv` by the zero-based `frame_index`. Each `start_frame_index` is inclusive and each `end_frame_index` is exclusive. Missing timing values are JSON `null`.
 
-- `Start Binary Recording`
-- `Stop Binary Recording`
-- `Convert Last Binary Recording To CSV`
-
-Binary recordings are written to `exports/spectrometer_capture_*.h5`. These HDF5 files are the full-rate capture artifact; the live graph and rolling session buffer are throttled display views.
-
-The same tools are available from the command line when running inside `PythonGUI`:
+The CLI can inspect a recording, extract the same frame-only CSV, or benchmark capture. Run it from `PythonGUI`.
 
 ```bat
-python -m backend.storage.binary_capture_cli validate exports\spectrometer_capture_YYYYMMDD_HHMMSS.h5
-python -m backend.storage.binary_capture_cli convert exports\spectrometer_capture_YYYYMMDD_HHMMSS.h5
+python -m backend.storage.binary_capture_cli validate exports\capture.h5
+python -m backend.storage.binary_capture_cli convert exports\capture.h5 --csv exports\frames.csv
 python -m backend.storage.binary_capture_cli benchmark --frames 1250 --sample-count 3694
 ```
 
@@ -319,11 +311,13 @@ The app writes logs to:
 logs/vis_nir_spec.log
 ```
 
-CSV exports are written under:
+HDF5 recordings are written under:
 
 ```text
 exports/
 ```
+
+The Save As dialog sets the location of each session ZIP.
 
 The log file is useful when:
 

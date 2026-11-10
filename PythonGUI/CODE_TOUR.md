@@ -18,8 +18,9 @@ The current app is a Kivy desktop program that:
 - opens a serial USB CDC connection to the STM32 firmware
 - parses mixed firmware text lines and binary `CCD1` frame packets
 - turns raw CCD frames into app-level spectrum frames
-- applies the current calibration pipeline for live display and export
-- keeps rolling buffers for full session export and compact spectrogram history
+- applies live calibration to the display and saved calibration to recording
+- keeps rolling buffers for bias capture and compact spectrogram history
+- records full-rate HDF5 captures and exports session ZIP files
 - renders a line spectrum or rolling spectrogram
 - provides calibration, display/layout, diagnostics, and performance tools
 
@@ -113,13 +114,13 @@ Important fields:
 - `device.adc_resolution_bits`: ADC resolution.
 - `device.adc_reference_volts`: ADC full-scale voltage.
 - `ui.refresh_interval_ms`: requested plot refresh period.
-- `ui.max_session_frames`: full-frame export buffer size.
+- `ui.max_session_frames`: recent full-frame buffer size for bias capture.
 
 The `UIConfig` model also has display defaults that may not be written in this default JSON file until the user saves active config:
 
 - `live_graph_mode`
 - `spectrogram_time_window_s`
-- `show_command_card`
+- `show_command_card` controls visibility of the Integration and Recording card.
 - `show_diagnostics_card`
 - `show_performance_card`
 - `show_frame_data_frame`
@@ -203,7 +204,7 @@ Definitions:
 - `TextLinePacket`: generic device text line.
 - `FramePacket`: one decoded binary frame packet from the STM32.
 - `DevicePacket`: type alias for all packet variants.
-- `SpectrumFrame`: app-level frame containing raw samples, processed live-display values, spectrogram row data, dark reference, and optional export columns.
+- `SpectrumFrame`: app-level frame containing raw samples, processed live-display values, spectrogram row data, and dark reference.
 - `SpectrogramHistoryFrame`: compact frame row used by the rolling spectrogram.
 
 Notes:
@@ -211,7 +212,6 @@ Notes:
 - `SpectrumFrame.adc_counts` preserves the raw samples.
 - `SpectrumFrame.live_display_counts` stores the processed 0-to-1 display signal used by the line plot.
 - `SpectrumFrame.spectrogram_row` stores a compressed 0-to-1 row for the rolling spectrogram.
-- `SpectrumFrame.wavelengths_nm`, `volts`, and `processed_intensity` can be filled lazily during export.
 
 ### `backend/models/status.py`
 
@@ -222,7 +222,8 @@ Definitions:
 
 - `ConnectionState`: disconnected, connecting, connected, or error.
 - `DeviceStatus`: current device state, frame counters, sample preview, firmware lines, and errors.
-- `SessionStatus`: session ID, start time, buffered frame count, dropped frame count, and last export path.
+- `SessionStatus`: session ID, start time, buffered frame count, and overwritten frame count.
+- `RecordingStatus`: HDF5 recording state, frame count, export progress, and last ZIP path.
 - `CommandResult`: success/failure result for UI actions.
 - `AppSnapshot`: one read-only snapshot used by the UI.
 
@@ -260,27 +261,24 @@ This class keeps reads and writes guarded by a lock and gives the UI one snapsho
 ### `backend/core/session_manager.py`
 
 Purpose:
-Owns rolling capture buffers and CSV export.
+Owns the rolling buffers for bias capture and spectrogram history.
 
 Definitions:
 
 - `DEFAULT_MAX_SPECTROGRAM_HISTORY_FRAMES`: compact spectrogram-history depth.
-- `SessionManager`: stores full `SpectrumFrame` objects for export and compact `SpectrogramHistoryFrame` rows for heatmap display.
+- `SessionManager`: stores recent full `SpectrumFrame` objects for bias capture and compact `SpectrogramHistoryFrame` rows for heatmap display.
 
 Important methods:
 
-- `set_max_frames(...)`: resize the full-frame export buffer.
+- `set_max_frames(...)`: resize the recent full-frame buffer.
 - `set_max_spectrogram_frames(...)`: resize the compact spectrogram buffer.
 - `append_frame(...)`: add one full frame and one compact spectrogram row when available.
-- `set_spectrum_builder(...)`: provide the export-time processing helper.
-- `reset()`: start a fresh session.
-- `export_csv()`: write the full-frame buffer to `exports/spectrometer_session_*.csv`.
 - `frames()`: return buffered full frames.
 - `spectrogram_frames()`: return compact history rows.
 - `status()`: return the current `SessionStatus`.
 
 Why this file matters:
-The line plot and CSV export need full data, while the rolling spectrogram needs many rows without keeping an unbounded raw-frame history.
+Bias capture needs recent full frames, and the spectrogram needs a longer history of compact rows.
 
 ### `backend/core/runtime.py`
 
@@ -306,17 +304,17 @@ Acts as the control layer between transport, parsing, state updates, session buf
 
 Definitions:
 
-- `CommandService`: main coordinator for connection management, incoming bytes, config application, raw commands, frame processing, missed-frame detection, and packet queue handling.
+- `CommandService`: coordinates connection, incoming packets, settings, frame processing, recording, and session export.
 
 Important methods:
 
 - `list_serial_ports()`
 - `connect(...)`
 - `disconnect()`
-- `send_raw_command(...)`
 - `apply_user_config(...)`
 - `apply_calibration_config(...)`
-- `refresh_session_status()`
+- `start_binary_recording(...)` and `stop_binary_recording()`
+- `export_session()`
 - `_handle_transport_state(...)`
 - `_handle_bytes(...)`
 - `_processing_loop()`
@@ -426,7 +424,6 @@ Definitions:
 - `MAX_BINARY_SAMPLE_COUNT`: parser safety cap.
 - `FRAME_HEADER_STRUCT`: little-endian binary header layout.
 - `parse_device_line(...)`: classifies banner/status lines vs generic text.
-- `encode_raw_command(...)`: converts raw UI command text into an ASCII line ending.
 - `try_parse_binary_frame(...)`: validates and decodes one binary frame packet.
 
 Packet shape:
@@ -496,21 +493,20 @@ Important methods:
 ### `backend/processing/spectrum_builder.py`
 
 Purpose:
-Builds `SpectrumFrame` objects and derived export columns from raw frame packets.
+Builds live `SpectrumFrame` objects from raw frame packets.
 
 Definitions:
 
 - `FRAME_DARK_START_INDEX` and `FRAME_DARK_END_INDEX`: shielded pixel range used for frame-wise dark reference.
 - `SPECTROGRAM_ROW_TARGET_WIDTH`: compact heatmap row width.
-- `SpectrumBuilder`: main frame conversion and live/export processing helper.
+- `SpectrumBuilder`: frame conversion and live-display processing.
 
 Important methods:
 
 - `update_device_config(...)`: stores updated ADC/device settings.
 - `build_from_frame(...)`: builds one `SpectrumFrame` with raw counts, processed live-display counts, dark reference, and compact spectrogram row.
 - `rebuild_live_frame(...)`: rebuilds the latest frame when calibration changes.
-- `build_export_columns(...)`: computes processed counts, wavelengths, volts, normalized intensity, and dark reference during CSV export.
-- `_build_processed_columns(...)`: central calibration pipeline shared by live display and export.
+- `_build_processed_columns(...)`: calibration pipeline for the live display.
 - `_build_spectrogram_row(...)`: compresses effective pixels into a fixed-width heatmap row.
 - `_normalize_processed_signal(...)`: supports absolute-saturation and auto-peak display normalization.
 - `_normalize_spectrogram_signal(...)`: keeps rolling spectrogram color scale comparable across frames.
@@ -521,7 +517,7 @@ The app preserves raw ADC samples while plotting processed display values.
 
 ## Storage Files
 
-The storage layer reads/writes JSON config and CSV exports.
+The storage layer handles JSON configuration, HDF5 recording, and session ZIP export.
 
 ### `backend/storage/config_store.py`
 
@@ -541,31 +537,17 @@ Definitions:
 
 - `CalibrationStore`: mirrors `ConfigStore` for calibration settings.
 
-### `backend/storage/export_csv.py`
+### `backend/storage/binary_capture.py` and `backend/storage/session_archive.py`
 
-Purpose:
-Exports stored frames to a CSV file.
+`DenseFrameProcessor` computes the stored measurement arrays with the saved
+calibration. `DenseBinaryRecorder` drains a bounded queue into HDF5. In v4
+files, `/frame/calibration_revision` joins each frame to a snapshot under
+`/calibration/revisions`.
 
-Definitions:
-
-- `export_spectra_csv(...)`: writes one row per sample and asks `SpectrumBuilder` for derived columns when needed.
-
-CSV columns:
-
-- `frame_id`
-- `timestamp`
-- `source`
-- `expected_sample_count`
-- `effective_start_index`
-- `effective_sample_count`
-- `frame_flags`
-- `sample_index`
-- `wavelength_nm`
-- `raw_adc_count`
-- `processed_adc_count`
-- `frame_dark_reference_count`
-- `volts`
-- `processed_intensity`
+`export_session_archive(...)` streams stored measurements into `frames.csv`
+and writes calibration snapshots and frame-index ranges to `calibration.json`.
+The two entries are published together in a ZIP at the selected path. The CLI uses the
+same frame CSV writer for standalone conversion.
 
 ## Frontend File
 
@@ -649,8 +631,7 @@ Important user-facing actions:
 - `reset_guided_pixel_mapping(...)`
 - `fit_wavelength_coefficients_from_points(...)`
 - `export_session(...)`
-- `reset_session(...)`
-- `send_raw_command(...)`
+- `toggle_binary_recording(...)`
 - `open_calibration_manager(...)`
 - `open_display_manager(...)`
 - `show_spectrum_view(...)`
@@ -683,7 +664,8 @@ Here is what happens during a normal frame capture:
 9. `CommandService._process_packet(...)` updates state and session tracking.
 10. `SpectrumBuilder.build_from_frame(...)` builds processed live-display values and a compact spectrogram row.
 11. `DesktopSpectrometerApp.refresh_plot(...)` redraws the selected graph mode.
-12. If the user clicks `Export Session CSV`, `SessionManager.export_csv()` and `export_spectra_csv(...)` write buffered data to disk.
+12. While recording, the command service sends each accepted frame to the HDF5 recorder independently of the display update rate.
+13. After recording stops, **Export Session** prompts for a ZIP destination on Windows, then packages the stored measurements, calibration revisions, and timing ranges on a worker.
 
 ## Typical Calibration Update
 
@@ -696,7 +678,7 @@ Here is what happens when calibration changes:
 5. If a latest frame exists, `SpectrumBuilder.rebuild_live_frame(...)` rebuilds its processed display values.
 6. `StateManager` stores the updated frame and calibration config.
 7. `refresh_view()` updates the graph and summaries.
-8. `Save Calibration` writes the calibration JSON and also syncs user config.
+8. `Save Calibration` writes the calibration JSON, syncs user config, and applies the saved calibration to subsequent recording frames.
 
 ## Best Files To Read First
 
@@ -715,7 +697,7 @@ If you want to understand the code in the most natural order, start here:
 11. `backend/processing/spectrum_builder.py`
 12. `backend/processing/calibration_manager.py`
 13. `backend/core/performance_monitor.py`
-14. `backend/storage/export_csv.py`
+14. `backend/storage/binary_capture.py` and `backend/storage/session_archive.py`
 15. `frontend/kivy_app.py`
 
 ## Final Mental Model

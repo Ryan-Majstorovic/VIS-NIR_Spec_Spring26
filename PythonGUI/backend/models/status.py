@@ -44,12 +44,11 @@ class DeviceStatus(BaseModel):
 
 
 class SessionStatus(BaseModel):
-    """Purpose: summarize buffered session data. Rationale: exporting and capture status belong in one lightweight object."""
+    """Summarize the live session buffers."""
     session_id: str
     started_at: datetime = Field(default_factory=utc_now)
     frames_buffered: int = 0
     dropped_frames: int = 0
-    last_export_path: str | None = None
 
 
 class RecordingStatus(BaseModel):
@@ -60,7 +59,9 @@ class RecordingStatus(BaseModel):
     queue_depth: int = 0
     path: str | None = None
     last_path: str | None = None
-    last_csv_path: str | None = None
+    last_zip_path: str | None = None
+    exporting: bool = False
+    export_percent: int | None = None
     error: str | None = None
 
 

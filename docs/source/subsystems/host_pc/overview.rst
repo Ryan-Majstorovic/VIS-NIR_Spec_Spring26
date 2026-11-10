@@ -15,7 +15,7 @@ System Role
 
 UUID: :ref:`42E97793-9F90-4EB8-9757-FDE4D6527DBC <uuid-42e97793-9f90-4eb8-9757-fde4d6527dbc>`
 
-The Host PC system manages the host-side software operations for the VIS-NIR spectrometer. It provides high-throughput USB CDC stream ingestion, numerical frame reconstruction and calibration, an interactive graphical operator desktop application, and dual-mode data retention and export facilities.
+The Host PC system manages the host-side software operations for the VIS-NIR spectrometer. It covers USB CDC stream ingestion, frame reconstruction and calibration, the operator application, and HDF5 capture and session archive export.
 
 .. _uuid-90977a32-cb75-4745-b6d0-470f1b5116be:
 
@@ -30,7 +30,7 @@ The Host PC software architecture is decoupled into asynchronous execution layer
 2. **Primary Data Pipeline & Calibration:** Executes master bias subtraction, frame dark baseline tracking, optical inversion to positive light counts, flat-field intensity correction, quantum efficiency (QE) response correction, polynomial wavelength mapping, and voltage scaling.
 3. **Core State & Session Coordination:** Maintains thread-safe application snapshots, circular in-memory session buffers, packet sequence gap tracking (missed frame detection), and streaming performance metrics.
 4. **Operator Desktop Interface (Decoupled 30 FPS Cadence):** A Kivy-based UI layer rendering real-time 3648-point line spectra, interactive cursor readouts, rolling waterfall spectrograms (compressed to 256 bins), device controls, and calibration management.
-5. **Storage & Dual-Mode Export:** Supports lightweight in-memory CSV export for interactive inspection alongside high-speed Dense Binary Capture directly to disk for long-duration, zero-drop measurement campaigns.
+5. **Capture and Export:** Full-rate HDF5 capture and post-recording ZIP export of frame measurements and calibration and timing history.
 
 .. _uuid-55f3ab31-2428-4459-a33f-4cc03984fd05:
 

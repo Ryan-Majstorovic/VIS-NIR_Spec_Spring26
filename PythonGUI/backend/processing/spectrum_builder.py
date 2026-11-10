@@ -58,7 +58,7 @@ class SpectrumBuilder:
                 _volts,
                 dark_reference,
                 saturation_reference_counts,
-            ) = self._build_processed_columns(frame.adc_counts, integration_us=frame.integration_us)
+            ) = self._build_processed_columns(frame.adc_counts, integration_us=frame.integration_us, timing_profile_id=frame.timing_profile_id)
             raw_adc_counts = (
                 frame.adc_counts.tolist()
                 if hasattr(frame.adc_counts, "tolist")
@@ -83,14 +83,17 @@ class SpectrumBuilder:
                 effective_sample_count=frame.effective_count,
                 frame_flags=frame.flags,
                 integration_us=frame.integration_us,
-                dark_calibration_applied=self._dark_matches(frame.integration_us),
+                timing_profile_id=frame.timing_profile_id,
+                reference_status=self.reference_status(frame.adc_counts, frame.timing_profile_id),
+                dark_calibration_applied=self._dark_matches(frame.integration_us, frame.timing_profile_id),
                 adc_counts=[int(value) for value in raw_adc_counts],
                 live_display_counts=display_counts.tolist(),
                 spectrogram_row=spectrogram_row,
                 dark_reference_count=dark_reference,
                 notes=(
                     "Captured from TIM4-synchronized USB CDC binary frames. Frame start is "
-                    "the CCD ICG low-to-high edge and frame end is the CCD ICG high-to-low edge."
+                    "referenced to ICG rising; the 32/3648/14 pixel map remains nominal. "
+                    "Sensor-pin phase and exact dummy origin require external verification."
                 ),
             )
 
@@ -109,7 +112,7 @@ class SpectrumBuilder:
                 _volts,
                 dark_reference,
                 saturation_reference_counts,
-            ) = self._build_processed_columns(frame.adc_counts, integration_us=frame.integration_us)
+            ) = self._build_processed_columns(frame.adc_counts, integration_us=frame.integration_us, timing_profile_id=frame.timing_profile_id)
             spectrogram_values = self._normalize_spectrogram_signal(
                 processed_counts,
                 saturation_reference_counts=saturation_reference_counts,
@@ -122,26 +125,10 @@ class SpectrumBuilder:
                 effective_start_index=frame.effective_start_index,
                 effective_sample_count=frame.effective_sample_count,
             )
+            updated.reference_status = self.reference_status(frame.adc_counts, frame.timing_profile_id)
             updated.dark_reference_count = dark_reference
-            updated.dark_calibration_applied = self._dark_matches(frame.integration_us)
+            updated.dark_calibration_applied = self._dark_matches(frame.integration_us, frame.timing_profile_id)
             return updated
-
-    def build_export_columns(
-        self,
-        *,
-        adc_counts: Sequence[int],
-        integration_us: int | None = None,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
-        """Purpose: compute export-time wavelength and intensity columns. Rationale: heavy derived data should be delayed until it is actually needed."""
-        (
-            corrected_counts,
-            normalized_counts,
-            wavelengths,
-            volts,
-            frame_dark_level,
-            _saturation_reference_counts,
-        ) = self._build_processed_columns(adc_counts, integration_us=integration_us)
-        return corrected_counts, wavelengths, volts, normalized_counts, frame_dark_level
 
     def _build_processed_counts(
         self,
@@ -166,15 +153,36 @@ class SpectrumBuilder:
         _processed_counts, normalized_counts, frame_dark_level = self._build_processed_counts(adc_counts)
         return normalized_counts, frame_dark_level
 
-    def _dark_matches(self, integration_us: int | None) -> bool:
+    def reference_status(self, adc_counts, timing_profile_id) -> str:
+        raw = np.asarray(adc_counts, dtype=float)
+        if raw.size < 32:
+            return "Reference unavailable: incomplete leading region"
+        reference = float(np.median(raw[16:29]))
+        active = float(np.median(raw[32:3680])) if raw.size > 32 else reference
+        message = f"Raw reference {reference:.1f} ADC; reference-active {reference-active:.1f} ADC"
+        config = self._calibration_manager.config
+        if config.bias_counts and config.bias_timing_profile_id != timing_profile_id:
+            return message + " | Stored bias bypassed: timing profile mismatch"
+        if config.dark_offset_counts and config.dark_timing_profile_id != timing_profile_id:
+            message += " | Stored dark bypassed: timing profile mismatch"
+        if len(config.bias_counts) < 29:
+            return message + " | Reference unverified: capture a covered baseline"
+        baseline = float(np.median(config.bias_counts[16:29]))
+        # Screening threshold, not a calibrated sensor saturation specification.
+        if abs(reference - baseline) > max(50.0, abs(baseline) * 0.05):
+            message += " | Reference shifted >5%/50 ADC: check illumination and analog levels"
+        return message
+
+    def _dark_matches(self, integration_us: int | None, timing_profile_id: int | None = None) -> bool:
         config = self._calibration_manager.config
         return bool(config.apply_dark_subtraction and config.dark_offset_counts and
-                    integration_us is not None and config.dark_integration_us == integration_us)
+                    integration_us is not None and config.dark_integration_us == integration_us and
+                    config.dark_timing_profile_id == timing_profile_id)
 
     def _build_processed_columns(
         self,
         adc_counts: Sequence[int],
-        *, integration_us: int | None = None,
+        *, integration_us: int | None = None, timing_profile_id: int | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, np.ndarray]:
         """Purpose: run the calibration pipeline through corrected counts, wavelength assignment, and final normalization. Rationale: both the live plot and CSV export should use the same ordered processing steps."""
         monitor = self._performance_monitor
@@ -187,13 +195,13 @@ class SpectrumBuilder:
             full_scale_count = float((1 << self._device_config.adc_resolution_bits) - 1)
             calibration_config = self._calibration_manager.config
             bias_corrected_raw = raw_counts.copy()
-            if calibration_config.bias_counts:
+            if calibration_config.bias_counts and calibration_config.bias_timing_profile_id == timing_profile_id:
                 bias_corrected_raw = apply_dark_subtraction(
                     bias_corrected_raw,
                     calibration_config.bias_counts,
                 )
             saturated_bias_corrected_raw = np.zeros_like(raw_counts, dtype=float)
-            if calibration_config.bias_counts:
+            if calibration_config.bias_counts and calibration_config.bias_timing_profile_id == timing_profile_id:
                 saturated_bias_corrected_raw = apply_dark_subtraction(
                     saturated_bias_corrected_raw,
                     calibration_config.bias_counts,
@@ -216,14 +224,14 @@ class SpectrumBuilder:
                 frame_dark_level=frame_dark_level,
                 full_scale_count=full_scale_count,
                 apply_dark_subtraction_enabled=calibration_config.apply_dark_subtraction,
-                dark_offset_counts=calibration_config.dark_offset_counts if self._dark_matches(integration_us) else [],
+                dark_offset_counts=calibration_config.dark_offset_counts if self._dark_matches(integration_us, timing_profile_id) else [],
             )
             saturation_light_counts = self._light_counts_from_bias_corrected_raw(
                 saturated_bias_corrected_raw,
                 frame_dark_level=frame_dark_level,
                 full_scale_count=full_scale_count,
                 apply_dark_subtraction_enabled=calibration_config.apply_dark_subtraction,
-                dark_offset_counts=calibration_config.dark_offset_counts if self._dark_matches(integration_us) else [],
+                dark_offset_counts=calibration_config.dark_offset_counts if self._dark_matches(integration_us, timing_profile_id) else [],
             )
 
             wavelengths = self._wavelengths_for_sample_count(len(raw_counts))

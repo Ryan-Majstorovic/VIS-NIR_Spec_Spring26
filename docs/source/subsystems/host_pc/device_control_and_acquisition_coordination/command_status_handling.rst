@@ -27,9 +27,9 @@ Inputs and Outputs
      - Byte chunks
      - Incoming serial bytes from connection transport.
    * - **Input**
-     - Raw Command String
-     - String
-     - Operator text command entered in the GUI.
+     - Integration Time Request
+     - Integer microseconds
+     - Validated integration time from the dedicated operator control.
    * - **Output**
      - Text Packet
      - ``BannerPacket`` / ``TextLinePacket``
@@ -56,7 +56,7 @@ Normative Requirements
 
 .. _uuid-e4f5a6b7-c8d9-40e1-f2a3-445566778804:
 
-**Requirement:** The Host PC Command Status Handling system shall encode operator command strings into ASCII bytes terminated with a newline (``\n``) and transmit them using a synchronized transport lock.
+**Requirement:** The Host PC Command Status Handling system shall encode an accepted operator integration-time request as a newline-terminated ASCII command and transmit it using the synchronized USB CDC transport.
 
    **Rationale:** Line-terminated ASCII encoding conforms to the firmware's virtual COM port command parser, while a transport write lock prevents command packets from fragmenting when multiple threads submit requests.
 
@@ -83,4 +83,4 @@ Verification & Testing
 ----------------------
 
 * **Interleaved Stream Test:** Stream 50 binary frames interspersed with 5 ASCII text lines; verify that exactly 50 ``BinaryFramePacket`` objects and 5 ``TextLinePacket`` objects are emitted without parse errors.
-* **Command Echo Test:** Send ``"PING\n"`` and verify that the exact byte sequence is written to the serial transport.
+* **Integration Command Test:** Apply a supported integration time and verify that the expected newline-terminated command reaches the serial transport.

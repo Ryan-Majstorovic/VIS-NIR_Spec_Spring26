@@ -1,96 +1,121 @@
 Export Initiation and Session Retention
 =======================================
 
-The Export Initiation and Session Retention system provides comprehensive data export and persistent storage for spectrometer measurements. It implements a dual-mode retention architecture supporting lightweight in-memory CSV export for interactive analysis alongside high-speed Dense Binary Capture directly to disk for long-duration 125 Hz measurement campaigns.
+This subsystem covers the HDF5 measurement capture and the ZIP handoff for
+downstream analysis.
 
 .. _uuid-d6e7f8a9-b0c1-42d3-e4f5-556677889901:
-
-Subsystem Role & Dual-Mode Architecture
----------------------------------------
-
-UUID: :ref:`D6E7F8A9-B0C1-42D3-E4F5-556677889901 <uuid-d6e7f8a9-b0c1-42d3-e4f5-556677889901>`
-
-At 125 Hz, streaming 3694 samples per frame produces 461,750 samples per second. Real-time ASCII CSV serialization of full frames during live acquisition causes memory exhaustion and thread backpressure. To solve this, the retention architecture provides two distinct operational paths:
-
-1. **In-Memory Rolling Session CSV Export:** Designed for quick captures, lab inspection, and small datasets (:math:`\le 500` frames). Exports the active in-memory frame buffer directly to a 14-column CSV file upon user request.
-2. **Dense Binary Capture & Offline Post-Processing:** Designed for sustained, long-duration measurement campaigns at full 125 Hz throughput:
-   * **Direct Binary Recording:** Streams raw 16-bit counts and nanosecond timestamps directly to disk (using chunked binary or HDF5) on a dedicated I/O thread.
-   * **Static Manifest Retention:** Saves instrument calibration state, wavelength mapping, and geometry parameters in a co-located ``manifest.json`` file at recording start.
-   * **Offline CSV Conversion:** Post-processes recorded binary files into calibrated CSV datasets after acquisition is completed, avoiding real-time CPU contention.
-
-Inputs and Outputs
-------------------
-
-.. list-table::
-   :header-rows: 1
-
-   * - Flow
-     - Name
-     - Structure / Type
-     - Description
-   * - **Input**
-     - Buffered Session Frames
-     - ``deque[SpectrumFrame]``
-     - In-memory frames retained by ``SessionManager``.
-   * - **Input**
-     - Raw Binary Stream
-     - Raw Packet Bytes
-     - Incoming ``BinaryFramePacket`` stream during dense recording.
-   * - **Output**
-     - Session CSV Export
-     - File (``.csv``)
-     - 14-column CSV containing raw counts, calibrated intensities, wavelengths, and volts.
-   * - **Output**
-     - Dense Binary Recording
-     - File (``.bin`` / ``.h5``)
-     - High-speed raw binary recording file with nanosecond timestamps.
-   * - **Output**
-     - Recording Manifest
-     - File (``.json``)
-     - Static calibration parameters co-registered with the binary capture.
 
 Normative Requirements
 ----------------------
 
-.. _uuid-d6e7f8a9-b0c1-42d3-e4f5-556677889902:
-
-**Requirement:** The Host PC Export Initiation and Session Retention system shall serialize in-memory session frames to CSV format containing exactly the 14 aligned data columns: ``frame_id``, ``timestamp``, ``source``, ``expected_sample_count``, ``effective_start_index``, ``effective_sample_count``, ``frame_flags``, ``sample_index``, ``wavelength_nm``, ``raw_adc_count``, ``processed_adc_count``, ``frame_dark_reference_count``, ``volts``, and ``processed_intensity``.
-
-   **Rationale:** Standardizing the 14-column export format ensures full traceability between the original raw hardware counts and every derived physical quantity (volts, calibrated counts, wavelength).
-
 .. _uuid-d6e7f8a9-b0c1-42d3-e4f5-556677889903:
 
-**Requirement:** The Host PC Export Initiation and Session Retention system shall provide a Dense Binary Recorder that writes raw 16-bit sample arrays, 32-bit frame counters, and 64-bit nanosecond timestamps directly to disk on a dedicated writer thread with bounded queuing.
+**Requirement:** The Host PC Export Initiation and Session Retention system
+shall write accepted raw 16-bit detector samples, frame identifiers,
+nanosecond timestamps, processed measurement arrays, and device-reported
+timing to an HDF5 file during binary recording, using a dedicated writer
+thread with bounded queuing.
 
-   **Rationale:** Direct binary disk streaming bypasses floating-point string serialization during active capture, guaranteeing sustained 125 Hz recording without queue overflows or dropped frames.
+**Rationale:** Binary storage avoids text serialization during acquisition,
+and a bounded queue limits memory use under writer backpressure.
 
 .. _uuid-d6e7f8a9-b0c1-42d3-e4f5-556677889904:
 
-**Requirement:** The Host PC Export Initiation and Session Retention system shall write a companion ``manifest.json`` file containing active wavelength polynomial coefficients, QE reference points, intensity factors, and detector geometry at the start of every binary recording.
+**Requirement:** The Host PC Export Initiation and Session Retention system
+shall start each recording with the last saved calibration corrections and
+shall apply newly saved corrections to subsequently accepted frames. The
+system shall retain each calibration revision used by at least one recorded
+frame and the revision identifier for each such frame in the
+``dense-hdf5-v4`` recording.
 
-   **Rationale:** Co-registering static calibration state with the raw binary dataset ensures that offline processors can accurately reconstruct calibrated spectra even if application settings are later modified.
+**Rationale:** Recording the calibration used at each frame boundary lets
+downstream analysis explain changes in processed data. Requiring saved
+corrections isolates captured data from temporary changes to the live spectrum.
+
+.. _uuid-7c634068-8e1e-40f6-b145-0952c4e11a8b:
+
+**Requirement:** The Host PC Export Initiation and Session Retention system
+shall use the spectrum scaling mode selected when a binary recording starts
+to normalize its processed intensity values for the duration of that recording.
+
+**Rationale:** A consistent scaling mode keeps recorded intensities comparable
+across frames while the operator adjusts the live view.
+
+.. _uuid-d6e7f8a9-b0c1-42d3-e4f5-556677889902:
+
+**Requirement:** The Host PC Export Initiation and Session Retention system
+shall stream the stored measurements from the completed HDF5 recording into
+``frames.csv``, with one row per sample and the columns ``frame_index``,
+``frame_id``, ``timestamp_ns``, ``sample_index``, ``raw_adc_count``,
+``processed_adc_count``, ``volts``, and ``processed_intensity`` in that
+order.
+
+**Rationale:** Reading the stored measurements preserves their acquisition
+and processing context, and limiting the row to sample and frame data avoids
+repeating calibration arrays for each frame.
+
+.. _uuid-d6e7f8a9-b0c1-42d3-e4f5-556677889906:
+
+**Requirement:** The Host PC Export Initiation and Session Retention system
+shall write the archive version, detector and ADC settings, sample indices,
+and the saved calibration settings, wavelength mapping, and correction
+vectors for each used revision to ``calibration.json``. The system shall
+write separate calibration and timing ranges with zero-based inclusive start
+and exclusive end frame indices. Calibration ranges shall identify the
+revision and whether stored dark calibration was applied. Timing ranges
+shall report the recorded integration time and timing profile identifier
+and shall represent unavailable timing values as JSON ``null``.
+
+**Rationale:** Each range can be joined to the CSV even if the device frame
+counter wraps or skips values. Separate ranges keep timing changes and
+calibration changes independently traceable.
 
 .. _uuid-d6e7f8a9-b0c1-42d3-e4f5-556677889905:
 
-**Requirement:** The Host PC Export Initiation and Session Retention system shall provide an offline post-processor that parses recorded binary files and generates calibrated CSV datasets matching the standard data model.
+**Requirement:** The Host PC Export Initiation and Session Retention system
+shall create a ZIP containing exactly ``frames.csv`` and
+``calibration.json`` at the path the operator confirms in the Windows Save As
+dialog when exporting a completed recording. The
+system shall perform conversion on a worker, accept one export at a time,
+publish the archive only after both entries are complete, and report the
+path or failure to the operator.
 
-   **Rationale:** Decoupling calibration math and CSV generation from the live capture loop allows high-throughput recording without sacrificing comprehensive CSV post-analysis.
+**Rationale:** Choosing a destination lets operators save each ZIP with the
+related experiment files. A worker keeps the controls responsive, and
+publishing only a complete archive preserves the capture and any prior
+successful archive if conversion fails.
 
-Export Data Schemas
--------------------
+.. _uuid-d6e7f8a9-b0c1-42d3-e4f5-556677889907:
 
-1. **In-Memory Session CSV Schema (14 Columns):**
-   * ``frame_id``, ``timestamp``, ``source``, ``expected_sample_count``, ``effective_start_index``, ``effective_sample_count``, ``frame_flags``
-   * ``sample_index``, ``wavelength_nm``, ``raw_adc_count``, ``processed_adc_count``, ``frame_dark_reference_count``, ``volts``, ``processed_intensity``
+**Requirement:** The Host PC Export Initiation and Session Retention system
+shall read dense HDF5 v1 through v3 recordings using the stored recording
+calibration as one revision and shall expose the same frame CSV schema
+through the command-line converter.
 
-2. **Dense Binary Recording Record Layout:**
-   * Header: Format version string (``dense-hdf5-v1`` or chunked binary).
-   * Frame Record: ``frame_id`` (uint32), ``timestamp_ns`` (int64), followed by :math:`N_{\text{samples}}` unsigned 16-bit integers (``uint16``).
-   * Companion Manifest: Sample indices, wavelength array, QE factors, intensity correction factors, and device geometry.
+**Rationale:** A stable export schema lets downstream tools process retained
+captures across HDF5 format versions.
 
-Verification & Testing
-----------------------
+.. _uuid-d6e7f8a9-b0c1-42d3-e4f5-556677889908:
 
-* **CSV Column Alignment Check:** Export 10 frames of 3694 samples; verify that the output CSV contains exactly 36,940 data rows (plus header) and that no columns contain NaN or null values.
-* **Dense Binary Zero-Drop Test:** Record a continuous 125 Hz stream for 60 seconds (7,500 frames) using ``DenseBinaryRecorder``; verify that all 7,500 frames are present on disk with zero dropped sequence IDs.
-* **Offline CSV Conversion Check:** Execute ``DenseFrameProcessor`` on a recorded binary file and verify that the derived CSV intensities and wavelengths match live export outputs within floating-point epsilon (:math:`10^{-6}`).
+**Requirement:** The Host PC Operator Application shall show a whole-number
+export percentage in the status bar based on the frames written to the CSV
+and shall reserve completion until the ZIP is published.
+
+**Rationale:** Frame-based progress gives the operator feedback during long
+exports and keeps completion tied to the availability of the ZIP.
+
+Verification
+------------
+
+* Export a capture containing a saved calibration change and a timing change
+  on different frames. Verify the ranges against the stored frame indices and
+  compare CSV measurements with the HDF5 arrays.
+* Export an older capture and verify that missing timing is reported as JSON
+  ``null``.
+* Induce an export failure and verify that the HDF5 source and any previously
+  completed ZIP are preserved.
+* Cancel the Save As dialog and verify that no ZIP is created. Repeat and
+  confirm a different folder and filename, then verify the ZIP at that path.
+* Export a multi-frame recording and verify that the percentage advances as
+  frames are written and that the completion message follows publication.

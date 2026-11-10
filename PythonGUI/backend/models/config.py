@@ -88,8 +88,10 @@ class CalibrationConfig(BaseModel):
     pixel_mapping_points: list[PixelMappingPoint] = Field(default_factory=list)
     bias_capture_frame_count: int = DEFAULT_BIAS_CAPTURE_FRAME_COUNT
     bias_counts: list[float] = Field(default_factory=list)
+    bias_timing_profile_id: int | None = None
     dark_offset_counts: list[float] = Field(default_factory=list)
     dark_integration_us: int | None = None
+    dark_timing_profile_id: int | None = None
     intensity_correction: list[float] = Field(default_factory=list)
     quantum_efficiency_points: list[SpectralResponsePoint] = Field(default_factory=list)
     quantum_efficiency_normalization_wavelength_nm: float | None = DEFAULT_QE_NORMALIZATION_WAVELENGTH_NM

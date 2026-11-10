@@ -317,5 +317,22 @@ Test TV-16 - Routine Client Workflow
 UUID: :ref:`2CF48D1E-090E-4E45-A1AD-5216F93CAB11 <uuid-2cf48d1e-090e-4e45-a1ad-5216f93cab11>`
 
 **Status:** Planned. **Method:** Demonstrate connect, acquisition, integration-
-time adjustment, calibration selection, live presentation, and CSV export
+time adjustment, calibration selection, live presentation, and export of a
+completed HDF5 recording to a session ZIP
 without source-code or hardware reconfiguration.
+
+.. _uuid-1ff82c60-67f4-47ec-89ae-3ca8d30a8271:
+
+Test TV-17 - Session Archive Traceability
+----------------------------------------
+
+**Requirement:** The Host PC Verification system shall verify that an
+exported session ZIP preserves the HDF5 measurements and joins each frame
+to the calibration and device timing used during capture.
+
+**Rationale:** Changes during acquisition can affect processed measurements.
+A frame-level join lets reviewers attribute each result to its capture state.
+
+**Status:** Planned. **Method:** Record frames across a calibration preview,
+a calibration save, and a device-confirmed timing change. Compare the ZIP
+measurements and both range lists with the HDF5 recording.

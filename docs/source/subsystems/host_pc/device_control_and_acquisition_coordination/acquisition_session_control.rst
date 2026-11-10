@@ -12,7 +12,7 @@ UUID: :ref:`C2D3E4F5-A6B7-48C9-D0E1-223344556601 <uuid-c2d3e4f5-a6b7-48c9-d0e1-2
 
 This stage governs the **transport-level stream lifecycle**, distinguishing it from the operator-level workflow session:
 * **Stream Lifecycle (This Section):** Focuses on physical frame delivery, frame counter sequence monitoring, missed frame detection, and acquisition rate calculation.
-* **Operator Session Workflow (:doc:`../operator_application/session_control`):** Focuses on user-initiated session recording, in-memory buffer sizing, and CSV export file generation.
+* **Operator Session Workflow (:doc:`../operator_application/session_control`):** Covers recording controls, rolling buffer sizing, and ZIP export from completed HDF5 recordings.
 
 Inputs and Outputs
 ------------------

@@ -20,8 +20,9 @@ to the end-to-end measurement and control handoffs:
    and recovery details remain open.
 5. Confirm that a qualified host record reaches the live display and capture
    handoff without bypassing ingress validation.
-6. Confirm that the export handoff provides raw ADC counts, processed counts,
-   wavelengths, volts, and processed intensity for the same measurement.
+6. Confirm that the session ZIP provides raw ADC counts, processed counts,
+   volts, and processed intensity and that its calibration and timing ranges
+   join to the corresponding measurements by frame index.
 7. When independent evidence is required, use the Communications Inspector to
    observe the boundary without treating it as the normal operator application.
 
@@ -34,7 +35,7 @@ unresolved disposition.
 **Regression triggers:** Re-run the affected checkpoints after changes to frame
 geometry, packet or status contract, control sequencing, integration-time
 contract, connection behavior, host ingress qualification, processing order,
-display/capture handoff, or CSV schema.  Optical alignment and calibration
+display/capture handoff, or session archive schema. Optical alignment and calibration
 changes may trigger system tests, but their methods are not duplicated here.
 
 Detailed procedures, characterization categories, calculations, retention

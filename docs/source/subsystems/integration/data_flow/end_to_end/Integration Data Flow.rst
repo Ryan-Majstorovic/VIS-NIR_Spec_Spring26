@@ -18,14 +18,15 @@ Measurement-plane flow
    spectral-correction stages without redefining them here.
 7. The operator application receives a qualified wavelength-and-intensity
    record for live display and capture.
-8. The session retains the corresponding data products needed for export.
-9. CSV export hands off raw ADC counts, processed counts, wavelengths, volts,
-   and processed intensity for downstream analysis.
+8. HDF5 capture retains the measurements and the associated calibration and
+   timing state during recording.
+9. Session export packages raw ADC counts, processed counts, volts, and
+   processed intensity in a CSV and puts wavelength mapping, calibration,
+   and timing ranges in a separate JSON entry in the same ZIP.
 
 Only complete, contract-conforming measurement content may advance from USB
-ingress to host processing.  The requirements do not define a dense-binary
-export artifact; any such artifact is ``Not In Docs`` and is not a baseline
-Integration requirement.
+ingress to host processing. The capture and archive contracts are defined in
+:doc:`Host PC Session Retention <../../../host_pc/operator_application/export_initiation_and_session_retention>`.
 
 Control-plane flow
 ------------------
@@ -43,7 +44,7 @@ granularity, exact application boundary, acknowledgments, retries, timeouts,
 idempotency, disconnect/reconnect, and recovery are ``Not In Docs``.
 
 Integration checkpoints occur at complete-frame formation, USB transfer, host
-qualification, display/capture handoff, and CSV-schema handoff.  Detailed
+qualification, display/capture handoff, and session archive handoff. Detailed
 procedures and pass/fail disposition belong to :doc:`Test and Verification
 <../../../test_and_verification/index>`.
 

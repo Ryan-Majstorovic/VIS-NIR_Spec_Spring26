@@ -4,7 +4,7 @@ Working repository for the Spring 2026 VIS-NIR spectrometer senior design projec
 
 The repo has two active software areas:
 
-- `PythonGUI/`: the Python/Kivy desktop app for connecting to the spectrometer, plotting live CCD data, calibrating the signal, and exporting sessions to CSV.
+- `PythonGUI/`: the Python/Kivy desktop app for connecting to the spectrometer, plotting and calibrating live CCD data, and exporting recorded sessions as ZIP files.
 - `CCD-Driver-Code/STM32F411_Basic/`: the STM32F411 CubeIDE firmware project that clocks the CCD, captures ADC samples with DMA, and streams binary frames over USB CDC.
 
 Other top-level files include the STM32Cube project metadata, a PuTTY helper batch file, and project measurement/reference material.
@@ -36,7 +36,7 @@ CCD-Driver-Code/STM32F411_Basic/readme.txt
 
 The STM32 firmware emits `CCD1` binary frame packets over USB CDC. Each normal frame contains `3694` 12-bit ADC samples: `32` leading dummy samples, `3648` effective pixels, and `14` trailing dummy samples.
 
-The desktop app reads that stream from a COM port, reconstructs mixed text and binary packets, applies the current calibration pipeline for the live display, stores recent frames in a rolling session buffer, and exports CSV rows with raw and derived columns.
+The desktop app reads the stream from a COM port, reconstructs mixed text and binary packets, applies calibration for live display, and retains recent frames for bias capture and the spectrogram. It records full-rate measurements to HDF5 and exports completed recordings as ZIP files containing frame measurements and calibration and timing history.
 
 The main app now includes:
 

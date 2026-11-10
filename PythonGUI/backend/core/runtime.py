@@ -100,10 +100,8 @@ def build_runtime(paths: RuntimePaths, logger: logging.Logger | None = None) -> 
         performance_monitor=performance_monitor,
     )
     session_manager = SessionManager(
-        export_dir=paths.project_root / "exports",
         max_frames=user_config.ui.max_session_frames,
         max_spectrogram_frames=DEFAULT_MAX_SPECTROGRAM_HISTORY_FRAMES,
-        spectrum_builder=spectrum_builder,
         performance_monitor=performance_monitor,
     )
     transport = SerialTransport()

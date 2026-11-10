@@ -38,7 +38,8 @@ End-to-End Measurement Chain
 8. The host processing path applies dark/bias, wavelength, flat-field, and
    response corrections when configured.
 9. The UI displays a line spectrum or rolling spectrogram.
-10. CSV export writes raw and derived columns for downstream analysis.
+10. Session export packages HDF5 measurements as CSV and includes a separate
+    calibration and timing JSON file.
 
 
 

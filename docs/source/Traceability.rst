@@ -40,17 +40,18 @@ only at major files or major behavior blocks.
      - Calibration
      - Host PC captures ``B_p`` from buffered covered frames, estimates
        ``beta_f`` from shielded pixels 16 through 28, preserves raw counts,
-       and records applied dark/bias terms in export artifacts.
+       and records applied dark/bias terms in HDF5 capture artifacts.
      - ``PythonGUI/frontend/kivy_app.py``,
        ``PythonGUI/backend/processing/calibration_manager.py``,
        ``PythonGUI/backend/processing/dark_subtraction.py``,
-       ``PythonGUI/backend/processing/spectrum_builder.py``,
-       ``PythonGUI/backend/storage/export_csv.py``, and
+       ``PythonGUI/backend/processing/spectrum_builder.py``, and
        ``PythonGUI/backend/storage/binary_capture.py``.
    * - ``70686C4A-AEE9-44A6-8B28-D74FD756FCD6``
      - Export
-     - CSV export writes raw and derived spectrum columns.
-     - ``PythonGUI/backend/storage/export_csv.py``.
+     - :doc:`Session ZIP export
+       <subsystems/host_pc/operator_application/export_initiation_and_session_retention>`.
+     - ``PythonGUI/backend/storage/session_archive.py`` and
+       ``PythonGUI/tests/test_session_archive.py``.
    * - ``C6B4929A-5CFB-46E8-A592-FD75E67ED745``
      - Integration
      - Standalone COM inspector validates USB CDC stream rate and frame

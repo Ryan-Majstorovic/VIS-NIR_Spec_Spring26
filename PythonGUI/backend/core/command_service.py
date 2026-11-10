@@ -14,13 +14,13 @@ from backend.core.session_manager import SessionManager
 from backend.core.state_manager import StateManager
 from backend.device.base_transport import BaseTransport
 from backend.device.packet_reader import DeviceStreamReader
-from backend.device.protocol import encode_raw_command
 from backend.models.config import CalibrationConfig, UserConfig, ensure_pixel_mode_without_mapping
 from backend.models.frames import BannerPacket, BinaryFramePacket, TextLinePacket
 from backend.models.status import CommandResult, ConnectionState, RecordingStatus
 from backend.processing.calibration_manager import CalibrationManager
 from backend.processing.spectrum_builder import SpectrumBuilder
-from backend.storage.binary_capture import DenseBinaryRecorder, DenseFrameProcessor, export_hdf5_to_csv
+from backend.storage.binary_capture import DenseBinaryRecorder, DenseFrameProcessor, RecordingCalibration
+from backend.storage.session_archive import export_session_archive
 
 
 DEFAULT_LIVE_DISPLAY_FPS = 30.0
@@ -57,10 +57,14 @@ class CommandService:
         self._expected_sample_count = state_manager.get_user_config().device.sample_count
         self._live_display_interval_s = self._display_interval_from_config(state_manager.get_user_config())
         self._incoming_bytes: queue.Queue[tuple[bytes, float] | None] = queue.Queue()
+        self._recording_lock = threading.Lock()
+        self._saved_calibration = calibration_manager.config.model_copy(deep=True)
         self._binary_recorder: DenseBinaryRecorder | None = None
         self._binary_processor: DenseFrameProcessor | None = None
+        self._recording_calibration: RecordingCalibration | None = None
         self._last_binary_recording_path: Path | None = None
-        self._last_binary_csv_path: Path | None = None
+        self._last_binary_zip_path: Path | None = None
+        self._export_percent: int | None = None
         self._binary_failure_reported = False
         self._last_recording_status_publish_s = 0.0
         self._performance_monitor = performance_monitor
@@ -147,30 +151,6 @@ class CommandService:
         self._state_manager.append_log("Disconnected from spectrometer.")
         return CommandResult(ok=True, message="Disconnected.")
 
-    def send_raw_command(self, command_text: str) -> CommandResult:
-        """Purpose: send a text command to the device. Rationale: command writes should use the same service path as other actions."""
-        cleaned = command_text.strip()
-        if not cleaned:
-            return CommandResult(ok=False, message="Command text is empty.")
-
-        if not self._transport.is_connected():
-            return CommandResult(ok=False, message="Device is not connected.")
-
-        if cleaned.split()[0].upper() == "INTEG":
-            fields = cleaned.split()
-            if len(fields) != 2 or not fields[1].isascii() or not fields[1].isdigit():
-                return CommandResult(ok=False, message="Use INTEG <integer microseconds>.")
-            return self.integration.request(int(fields[1]))
-        self._transport.write(encode_raw_command(cleaned))
-        self._state_manager.append_log(f"TX > {cleaned}")
-        return CommandResult(
-            ok=True,
-            message=(
-                "Command sent over USB CDC. Device-side command handling depends on "
-                "the active STM32 firmware."
-            ),
-        )
-
     def apply_user_config(self, config: UserConfig) -> None:
         """Purpose: apply new user settings to the running app. Rationale: config edits should immediately update dependent services."""
         self._state_manager.set_user_config(config)
@@ -182,9 +162,12 @@ class CommandService:
         self._state_manager.set_session_status(self._session_manager.status())
         self._state_manager.append_log("User configuration updated.")
 
-    def apply_calibration_config(self, config: CalibrationConfig) -> None:
+    def apply_calibration_config(self, config: CalibrationConfig, *, saved: bool = False) -> None:
         """Purpose: apply new calibration settings. Rationale: calibration changes should flow through one controlled update point."""
         normalized_config = ensure_pixel_mode_without_mapping(config)
+        if saved:
+            with self._recording_lock:
+                self._apply_recording_calibration(normalized_config)
         self._calibration_manager.update_config(normalized_config)
         self._state_manager.set_calibration_config(normalized_config)
         latest_spectrum = self._state_manager.latest_spectrum()
@@ -194,83 +177,124 @@ class CommandService:
             )
         self._state_manager.append_log("Calibration configuration updated.")
 
-    def refresh_session_status(self) -> None:
-        """Purpose: push the latest session summary into shared state. Rationale: UI reads should come from StateManager snapshots."""
-        self._state_manager.set_session_status(self._session_manager.status())
-        self._publish_recording_status()
+    def _apply_recording_calibration(self, config: CalibrationConfig) -> None:
+        if config == self._saved_calibration:
+            return
+        self._saved_calibration = config.model_copy(deep=True)
+        recorder = self._binary_recorder
+        if recorder is None:
+            return
+        status = recorder.status()
+        if not status["active"] or status["failed"]:
+            return
+        assert self._binary_processor is not None and self._recording_calibration is not None
+        try:
+            processor = DenseFrameProcessor(self._binary_processor.device_config, self._saved_calibration)
+            calibration = processor.recording_calibration(self._recording_calibration.revision + 1)
+        except Exception as exc:
+            recorder.fail(f"Could not apply saved calibration: {exc}")
+            self._publish_recording_status()
+            return
+        self._binary_processor = processor
+        self._recording_calibration = calibration
 
     def start_binary_recording(self, path: Path | None = None) -> CommandResult:
         """Purpose: start full-rate dense HDF5 recording. Rationale: binary capture is the authoritative storage path."""
-        if self._binary_recorder is not None and self._binary_recorder.status()["active"]:
-            return CommandResult(ok=False, message="Binary recording is already running.")
+        with self._recording_lock:
+            if self._binary_recorder is not None and self._binary_recorder.status()["active"]:
+                return CommandResult(ok=False, message="Binary recording is already running.")
 
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        output_path = Path(path) if path is not None else self._binary_export_dir / f"spectrometer_capture_{timestamp}.h5"
-        try:
-            config = self._state_manager.get_user_config()
-            self._binary_processor = DenseFrameProcessor(config.device, self._calibration_manager.config)
-            self._binary_recorder = DenseBinaryRecorder(
-                output_path,
-                self._binary_processor.static_data,
-                self._binary_processor.metadata_attributes(),
-            )
-            self._binary_recorder.start()
-        except Exception as exc:
-            self._binary_recorder = None
-            self._binary_processor = None
-            self._state_manager.set_recording_status(
-                RecordingStatus(
-                    failed=True,
-                    path=str(output_path),
-                    last_path=str(self._last_binary_recording_path) if self._last_binary_recording_path else None,
-                    last_csv_path=str(self._last_binary_csv_path) if self._last_binary_csv_path else None,
-                    error=str(exc),
+            if self._export_percent is not None:
+                return CommandResult(ok=False, message="Wait for the session export to finish.")
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+            output_path = Path(path) if path is not None else self._binary_export_dir / f"spectrometer_capture_{timestamp}.h5"
+            try:
+                config = self._state_manager.get_user_config()
+                self._binary_processor = DenseFrameProcessor(config.device, self._saved_calibration)
+                self._recording_calibration = self._binary_processor.recording_calibration(0)
+                self._binary_recorder = DenseBinaryRecorder(
+                    output_path,
+                    self._binary_processor.static_data,
+                    self._binary_processor.metadata_attributes(),
                 )
-            )
-            self._state_manager.append_log(f"Binary recording failed to start: {exc}")
-            return CommandResult(ok=False, message=f"Binary recording failed to start: {exc}")
+                self._binary_recorder.start()
+            except Exception as exc:
+                self._binary_recorder = None
+                self._binary_processor = None
+                self._recording_calibration = None
+                self._state_manager.set_recording_status(
+                    RecordingStatus(
+                        failed=True,
+                        path=str(output_path),
+                        last_path=str(self._last_binary_recording_path) if self._last_binary_recording_path else None,
+                        last_zip_path=str(self._last_binary_zip_path) if self._last_binary_zip_path else None,
+                        error=str(exc),
+                    )
+                )
+                self._state_manager.append_log(f"Binary recording failed to start: {exc}")
+                return CommandResult(ok=False, message=f"Binary recording failed to start: {exc}")
 
-        self._last_binary_recording_path = output_path
-        self._binary_failure_reported = False
-        self._last_recording_status_publish_s = 0.0
-        self._publish_recording_status()
-        self._state_manager.append_log(f"Started binary recording: {output_path}")
-        return CommandResult(ok=True, message=f"Started binary recording: {output_path}")
+            self._last_binary_recording_path = output_path
+            self._binary_failure_reported = False
+            self._last_recording_status_publish_s = 0.0
+            self._publish_recording_status()
+            self._state_manager.append_log(f"Started binary recording: {output_path}")
+            return CommandResult(ok=True, message=f"Started binary recording: {output_path}")
 
     def stop_binary_recording(self) -> CommandResult:
         """Purpose: stop dense HDF5 recording and flush queued frames. Rationale: the file should be complete before conversion."""
-        if self._binary_recorder is None:
-            return CommandResult(ok=False, message="No binary recording is running.")
+        with self._recording_lock:
+            if self._binary_recorder is None:
+                return CommandResult(ok=False, message="No binary recording is running.")
 
-        self._binary_recorder.stop()
-        status = self._binary_recorder.status()
-        self._publish_recording_status()
-        if status["failed"]:
-            message = f"Binary recording stopped after failure: {status['failure_message']}"
+            self._binary_recorder.stop()
+            status = self._binary_recorder.status()
+            self._publish_recording_status()
+            if status["failed"]:
+                message = f"Binary recording stopped after failure: {status['failure_message']}"
+                self._state_manager.append_log(message)
+                return CommandResult(ok=False, message=message)
+
+            message = f"Binary recording stopped: {status['frame_count']} frames written to {self._binary_recorder.path}"
             self._state_manager.append_log(message)
-            return CommandResult(ok=False, message=message)
+            return CommandResult(ok=True, message=message)
 
-        message = f"Binary recording stopped: {status['frame_count']} frames written to {self._binary_recorder.path}"
-        self._state_manager.append_log(message)
-        return CommandResult(ok=True, message=message)
+    def export_session(self, output_path: Path | None = None) -> CommandResult:
+        with self._recording_lock:
+            if self._export_percent is not None:
+                return CommandResult(ok=False, message="A session export is already running.")
+            if self._binary_recorder is None:
+                return CommandResult(ok=False, message="No completed binary recording is available.")
+            status = self._binary_recorder.status()
+            if status["active"]:
+                return CommandResult(ok=False, message="Stop binary recording before exporting the session.")
+            if status["failed"]:
+                return CommandResult(ok=False, message="The latest binary recording failed.")
+            if not status["frame_count"]:
+                return CommandResult(ok=False, message="The binary recording contains no frames.")
+            source = self._binary_recorder.path
+            self._export_percent = 0
+            self._publish_recording_status()
 
-    def convert_last_binary_recording_to_csv(self) -> CommandResult:
-        """Purpose: export the last dense HDF5 recording to CSV. Rationale: CSV should be generated only from stored binary arrays."""
-        if self._binary_recorder is not None and self._binary_recorder.status()["active"]:
-            return CommandResult(ok=False, message="Stop binary recording before converting it to CSV.")
-        if self._last_binary_recording_path is None:
-            return CommandResult(ok=False, message="No binary recording has been created yet.")
+        def update_progress(percent: int) -> None:
+            with self._recording_lock:
+                self._export_percent = percent
+                self._publish_recording_status()
 
+        zip_path = None
         try:
-            csv_path = export_hdf5_to_csv(self._last_binary_recording_path)
+            zip_path = export_session_archive(source, output_path, on_progress=update_progress)
+            result = CommandResult(ok=True, message=f"Exported session to {zip_path}.")
         except Exception as exc:
-            self._state_manager.append_log(f"Binary CSV conversion failed: {exc}")
-            return CommandResult(ok=False, message=f"Binary CSV conversion failed: {exc}")
-
-        self._last_binary_csv_path = csv_path
-        self._publish_recording_status()
-        self._state_manager.append_log(f"Converted binary recording to CSV: {csv_path}")
-        return CommandResult(ok=True, message=f"Converted binary recording to CSV: {csv_path}")
+            result = CommandResult(ok=False, message=f"Session export failed: {exc}")
+        finally:
+            with self._recording_lock:
+                if zip_path is not None:
+                    self._last_binary_zip_path = zip_path
+                self._export_percent = None
+                self._publish_recording_status()
+        self._state_manager.append_log(result.message)
+        return result
 
     @staticmethod
     def _display_interval_from_config(config: UserConfig) -> float:
@@ -297,55 +321,58 @@ class CommandService:
                 queue_depth=int(recorder_status.get("queue_depth", 0)),
                 path=recorder_status.get("path"),
                 last_path=str(self._last_binary_recording_path) if self._last_binary_recording_path else None,
-                last_csv_path=str(self._last_binary_csv_path) if self._last_binary_csv_path else None,
+                last_zip_path=str(self._last_binary_zip_path) if self._last_binary_zip_path else None,
+                exporting=self._export_percent is not None,
+                export_percent=self._export_percent,
                 error=recorder_status.get("failure_message"),
             )
         )
 
     def _append_binary_record(self, packet: BinaryFramePacket) -> None:
-        if self._binary_recorder is None or self._binary_processor is None:
-            return
-        current_status = self._binary_recorder.status()
-        if current_status["failed"]:
-            if not self._binary_failure_reported:
+        with self._recording_lock:
+            if self._binary_recorder is None or self._binary_processor is None:
+                return
+            current_status = self._binary_recorder.status()
+            if current_status["failed"]:
+                if not self._binary_failure_reported:
+                    self._binary_failure_reported = True
+                    self._state_manager.append_log(f"Binary recording failed: {current_status['failure_message']}")
+                    self._publish_recording_status()
+                return
+            if not current_status["active"]:
+                return
+
+            monitor = self._performance_monitor
+            try:
+                with (
+                    monitor.measure("backend.binary_dense_process")
+                    if monitor is not None
+                    else nullcontext()
+                ):
+                    record = self._binary_processor.build_record(packet)
+                with (
+                    monitor.measure("backend.binary_queue_append")
+                    if monitor is not None
+                    else nullcontext()
+                ):
+                    accepted = self._binary_recorder.append(record, self._recording_calibration)
+            except Exception as exc:
+                self._binary_recorder.fail(str(exc))
+                accepted = False
+
+            if monitor is not None:
+                status = self._binary_recorder.status()
+                monitor.record_value("backend.binary_queue_depth", status["queue_depth"])
+                monitor.record_value("backend.binary_frames_written", status["frame_count"])
+
+            if not accepted and not self._binary_failure_reported:
                 self._binary_failure_reported = True
-                self._state_manager.append_log(f"Binary recording failed: {current_status['failure_message']}")
+                status = self._binary_recorder.status()
+                self._state_manager.append_log(f"Binary recording failed: {status['failure_message']}")
                 self._publish_recording_status()
-            return
-        if not current_status["active"]:
-            return
-
-        monitor = self._performance_monitor
-        try:
-            with (
-                monitor.measure("backend.binary_dense_process")
-                if monitor is not None
-                else nullcontext()
-            ):
-                record = self._binary_processor.build_record(packet)
-            with (
-                monitor.measure("backend.binary_queue_append")
-                if monitor is not None
-                else nullcontext()
-            ):
-                accepted = self._binary_recorder.append(record)
-        except Exception as exc:
-            self._binary_recorder.fail(str(exc))
-            accepted = False
-
-        if monitor is not None:
-            status = self._binary_recorder.status()
-            monitor.record_value("backend.binary_queue_depth", status["queue_depth"])
-            monitor.record_value("backend.binary_frames_written", status["frame_count"])
-
-        if not accepted and not self._binary_failure_reported:
-            self._binary_failure_reported = True
-            status = self._binary_recorder.status()
-            self._state_manager.append_log(f"Binary recording failed: {status['failure_message']}")
-            self._publish_recording_status()
-            return
-        if (perf_counter() - self._last_recording_status_publish_s) >= 0.5:
-            self._publish_recording_status()
+                return
+            if (perf_counter() - self._last_recording_status_publish_s) >= 0.5:
+                self._publish_recording_status()
 
     def _handle_transport_state(self, state: ConnectionState, detail: str | None) -> None:
         """Purpose: mirror transport state changes into app state. Rationale: the UI should react to connection events consistently."""

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import struct
 import time
+import zlib
 from datetime import datetime, timezone
 
 import numpy as np
@@ -11,11 +12,12 @@ from backend.models.frames import BannerPacket, BinaryFramePacket, DevicePacket,
 
 # DOC-UUID: 2BD0CC64-CA9B-4886-BE5C-970D86E21283
 PACKET_MAGIC = b"CCD1"
-PACKET_VERSION = 2
+PACKET_VERSION = 3
 PACKET_TYPE_FRAME = 1
 MAX_BINARY_SAMPLE_COUNT = 8192
 LEGACY_FRAME_HEADER_STRUCT = struct.Struct("<4sBBHIHHHHI")
 FRAME_HEADER_STRUCT = struct.Struct("<4sBBHIHHHHII")
+FRAME_V3_HEADER_STRUCT = struct.Struct("<4sBBHIHHHHIII")
 
 
 def parse_device_line(line: str) -> DevicePacket | None:
@@ -33,11 +35,6 @@ def parse_device_line(line: str) -> DevicePacket | None:
         return BannerPacket(text=cleaned)
 
     return TextLinePacket(text=cleaned)
-
-
-def encode_raw_command(command_text: str) -> bytes:
-    """Purpose: convert a user command into device bytes. Rationale: USB CDC command writes should use one consistent line format."""
-    return f"{command_text.strip()}\n".encode("ascii", errors="ignore")
 
 
 def try_parse_binary_frame(buffer: bytes) -> tuple[BinaryFramePacket | None, int]:
@@ -61,10 +58,10 @@ def try_parse_binary_frame(buffer: bytes) -> tuple[BinaryFramePacket | None, int
     if magic != PACKET_MAGIC:
         return None, 1
 
-    if version not in (1, 2) or packet_type != PACKET_TYPE_FRAME:
+    if version not in (1, 2, 3) or packet_type != PACKET_TYPE_FRAME:
         return None, 1
 
-    if version == 2:
+    if version >= 2:
         if len(buffer) < FRAME_HEADER_STRUCT.size:
             return None, 0
         if not valid_integration(struct.unpack_from("<I", buffer, 24)[0]):
@@ -77,21 +74,26 @@ def try_parse_binary_frame(buffer: bytes) -> tuple[BinaryFramePacket | None, int
     if payload_bytes != expected_payload_bytes:
         return None, 1
 
-    header_size = FRAME_HEADER_STRUCT.size if version == 2 else LEGACY_FRAME_HEADER_STRUCT.size
+    header_size = {1: 24, 2: 28, 3: 32}[version]
     if effective_start + effective_count > sample_count:
         return None, 1
-    total_bytes = header_size + payload_bytes
+    total_bytes = header_size + payload_bytes + (4 if version == 3 else 0)
     if len(buffer) < total_bytes:
         return None, 0
 
-    payload = memoryview(buffer)[header_size:total_bytes]
+    if version == 3 and zlib.crc32(buffer[:total_bytes - 4]) != struct.unpack_from("<I", buffer, total_bytes - 4)[0]:
+        return None, 1
+    payload = memoryview(buffer)[header_size:header_size + payload_bytes]
     adc_counts = np.frombuffer(payload, dtype="<u2", count=sample_count).copy()
+    if np.any(adc_counts > 4095):
+        return None, 1
     timestamp_ns = time.time_ns()
 
     return (
         BinaryFramePacket(
             frame_counter=frame_id,
-            integration_us=struct.unpack_from("<I", buffer, 24)[0] if version == 2 else None,
+            integration_us=struct.unpack_from("<I", buffer, 24)[0] if version >= 2 else None,
+            timing_profile_id=struct.unpack_from("<I", buffer, 28)[0] if version == 3 else None,
             sample_count=sample_count,
             effective_start=effective_start,
             effective_count=effective_count,

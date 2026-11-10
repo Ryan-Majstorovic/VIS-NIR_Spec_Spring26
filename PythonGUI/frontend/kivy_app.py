@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import sys
 from collections import deque
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from threading import Thread
 from time import perf_counter
 from typing import Sequence
 
@@ -38,6 +41,7 @@ from backend.models.config import (
 )
 from backend.models.frames import SpectrogramHistoryFrame, SpectrumFrame
 from backend.processing.wavelength_map import indices_to_wavelengths
+from frontend.windows_dialogs import choose_session_zip_path
 
 # Shared layout metrics.
 # Format:
@@ -140,13 +144,15 @@ APP_SURROUND_BACKGROUND_RGBA = (0.0, 0.0, 0.0, 1.0)
 CARD_BORDER_RGBA = (0.82, 0.78, 0.69, 1.0)
 GUIDE_LINE_RGBA = (0.82, 0.86, 0.82, 0.8)
 PLOT_LINE_RGBA = (0.06, 0.46, 0.43, 1.0)
-PLOT_CURSOR_RGBA = (0.72, 0.19, 0.17, 0.95)
-PLOT_CURSOR_GUIDE_RGBA = (0.72, 0.19, 0.17, 0.55)
+ACCENT_RED_RGB = (0.72, 0.19, 0.17)
+PLOT_CURSOR_RGBA = (*ACCENT_RED_RGB, 0.95)
+PLOT_CURSOR_GUIDE_RGBA = (*ACCENT_RED_RGB, 0.55)
 TEXT_PRIMARY_RGBA = (0.13, 0.19, 0.24, 1.0)
 TEXT_SECONDARY_RGBA = (0.16, 0.20, 0.24, 1.0)
 TEXT_TERTIARY_RGBA = (0.28, 0.32, 0.36, 1.0)
 NOTICE_RGBA = (0.17, 0.21, 0.26, 1.0)
 BUTTON_BACKGROUND_RGBA = (0.06, 0.46, 0.43, 1.0)
+STOP_RECORDING_BUTTON_BACKGROUND_RGBA = (*ACCENT_RED_RGB, 1.0)
 BUTTON_TEXT_RGBA = (1.0, 1.0, 1.0, 1.0)
 
 # Shared typography.
@@ -248,7 +254,7 @@ DISPLAY_MANAGER_PANELS_CARD_TITLE_TEXT = "Side Panels"
 DISPLAY_MANAGER_PANELS_HELPER_TEXT = "Choose which side-panel cards remain visible in the main workspace."
 DISPLAY_MANAGER_FRAME_CARD_TITLE_TEXT = "Frame Data"
 DISPLAY_MANAGER_FRAME_HELPER_TEXT = "Pick which live status rows appear in the Frame Data card."
-DISPLAY_MANAGER_SHOW_COMMAND_CARD_TEXT = "Show Session And Commands card"
+DISPLAY_MANAGER_SHOW_COMMAND_CARD_TEXT = "Show Integration and Recording card"
 DISPLAY_MANAGER_SHOW_DIAGNOSTICS_CARD_TEXT = "Show Diagnostics card"
 DISPLAY_MANAGER_SHOW_PERFORMANCE_CARD_TEXT = "Show Performance card"
 DISPLAY_MANAGER_SHOW_FRAME_ROW_TEXT = "Show frame summary"
@@ -261,14 +267,10 @@ DISPLAY_MANAGER_SHOW_CURSOR_ROW_TEXT = "Show cursor readout"
 # Session and command card parameters.
 # Format:
 # - these values control the command/session card wording and button captions.
-COMMAND_CARD_TITLE_TEXT = "Session And Commands"
-COMMAND_CARD_HINT_TEXT = "Raw USB CDC command"
-COMMAND_CARD_SEND_BUTTON_TEXT = "Send Raw Command"
-COMMAND_CARD_EXPORT_BUTTON_TEXT = "Export Session CSV"
-COMMAND_CARD_RESET_BUTTON_TEXT = "Reset Session"
+COMMAND_CARD_TITLE_TEXT = "Integration and Recording"
+COMMAND_CARD_EXPORT_BUTTON_TEXT = "Export Session"
 COMMAND_CARD_START_BINARY_BUTTON_TEXT = "Start Binary Recording"
 COMMAND_CARD_STOP_BINARY_BUTTON_TEXT = "Stop Binary Recording"
-COMMAND_CARD_CONVERT_BINARY_BUTTON_TEXT = "Convert Last Binary Recording To CSV"
 
 # Spectrum card parameters.
 # Format:
@@ -1165,7 +1167,6 @@ class DesktopSpectrometerApp(App):
         # handlers and refresh timers.
         self.port_spinner: Spinner | None = None
         self.display_toggle_button: Button | None = None
-        self.command_input: TextInput | None = None
         self.integration_input = None
         self.integration_unit = None
         self.integration_status = None
@@ -1247,7 +1248,9 @@ class DesktopSpectrometerApp(App):
         self._left_scroll: ScrollView | None = None
         self._calibration_wavelength_plot_shell: BoxLayout | None = None
         self._connection_buttons: BoxLayout | None = None
-        self._session_buttons: BoxLayout | None = None
+        self._recording_button: Button | None = None
+        self._export_session_button: Button | None = None
+        self._export_worker: Thread | None = None
         self._connection_card: Card | None = None
         self._workspace_card: Card | None = None
         self._command_card: Card | None = None
@@ -1426,7 +1429,7 @@ class DesktopSpectrometerApp(App):
             )
         )
 
-        # Session/command card is for export/reset and raw command testing.
+        # Integration and recording share the existing card visibility setting.
         command_card = Card(size_hint_y=None)
         command_card.bind(minimum_height=command_card.setter("height"))
         self._command_card = command_card
@@ -1447,40 +1450,21 @@ class DesktopSpectrometerApp(App):
         command_card.add_widget(exposure_buttons)
         self.integration_status = self._small_label("Waiting for device timing metadata.")
         command_card.add_widget(self.integration_status)
-        self.command_input = TextInput(
-            text="",
-            multiline=False,
-            hint_text=COMMAND_CARD_HINT_TEXT,
+        self._recording_button = self._button(
+            COMMAND_CARD_START_BINARY_BUTTON_TEXT,
+            self.toggle_binary_recording,
             size_hint_y=None,
-            height=CONTROL_HEIGHT,
+            height=BUTTON_HEIGHT,
         )
-        self._configure_text_input(self.command_input)
-        command_card.add_widget(self.command_input)
-        command_card.add_widget(
-            self._button(
-                COMMAND_CARD_SEND_BUTTON_TEXT,
-                self.send_raw_command,
-                size_hint_y=None,
-                height=BUTTON_HEIGHT,
-            )
+        command_card.add_widget(self._recording_button)
+        self._export_session_button = self._button(
+            COMMAND_CARD_EXPORT_BUTTON_TEXT,
+            self.export_session,
+            size_hint_y=None,
+            height=BUTTON_HEIGHT,
+            disabled=True,
         )
-        session_buttons = BoxLayout(size_hint_y=None, height=BUTTON_HEIGHT, spacing=CARD_GAP)
-        self._session_buttons = session_buttons
-        session_buttons.add_widget(self._button(COMMAND_CARD_EXPORT_BUTTON_TEXT, self.export_session))
-        session_buttons.add_widget(self._button(COMMAND_CARD_RESET_BUTTON_TEXT, self.reset_session))
-        command_card.add_widget(session_buttons)
-        binary_buttons = BoxLayout(size_hint_y=None, height=BUTTON_HEIGHT, spacing=CARD_GAP)
-        binary_buttons.add_widget(self._button(COMMAND_CARD_START_BINARY_BUTTON_TEXT, self.start_binary_recording))
-        binary_buttons.add_widget(self._button(COMMAND_CARD_STOP_BINARY_BUTTON_TEXT, self.stop_binary_recording))
-        command_card.add_widget(binary_buttons)
-        command_card.add_widget(
-            self._button(
-                COMMAND_CARD_CONVERT_BINARY_BUTTON_TEXT,
-                self.convert_last_binary_recording_to_csv,
-                size_hint_y=None,
-                height=BUTTON_HEIGHT,
-            )
-        )
+        command_card.add_widget(self._export_session_button)
 
         # Plot card is the main live-view area for the CCD output.
         plot_card = Card()
@@ -2133,7 +2117,7 @@ class DesktopSpectrometerApp(App):
 
         user_config_path = self._save_user_config_state()
         path = self.runtime.calibration_store.save(config)
-        self.runtime.command_service.apply_calibration_config(config)
+        self.runtime.command_service.apply_calibration_config(config, saved=True)
         self._refresh_calibration_summaries(config)
         if user_config_path is None:
             self.set_notice(f"Saved calibration config to {path}.")
@@ -2370,35 +2354,42 @@ class DesktopSpectrometerApp(App):
         ))
 
     def export_session(self, *_args) -> None:
-        """Purpose: export buffered frames to CSV. Rationale: captured data should be easy to save without leaving the app."""
-        path = self.runtime.session_manager.export_csv()
-        self.runtime.command_service.refresh_session_status()
-        self.set_notice(f"Exported session to {path}.")
-        self.refresh_view()
+        if self._export_worker is not None:
+            return
 
-    def start_binary_recording(self, *_args) -> None:
-        """Purpose: start authoritative dense binary capture. Rationale: full-rate data should go to HDF5 instead of the throttled display buffer."""
-        result = self.runtime.command_service.start_binary_recording()
+        recording = self.runtime.state_manager.snapshot(include_spectrum=False).recording
+        if not recording.last_path or recording.active or recording.failed or not recording.frame_count:
+            return
+        suggested = Path(recording.last_path).with_suffix(".zip")
+        try:
+            destination = choose_session_zip_path(suggested.name) if sys.platform == "win32" else suggested
+        except OSError as exc:
+            self.set_notice(str(exc))
+            return
+        if destination is None:
+            return
+
+        def finish(message: str) -> None:
+            self._export_worker = None
+            self.set_notice(message)
+            self.refresh_status()
+
+        def export() -> None:
+            result = self.runtime.command_service.export_session(destination)
+            Clock.schedule_once(lambda _dt: finish(result.message))
+
+        self._export_worker = Thread(target=export, name="session-export")
+        self.set_notice("Exporting session… 0%")
+        self.refresh_status()
+        self._export_worker.start()
+
+    def toggle_binary_recording(self, *_args) -> None:
+        recording = self.runtime.state_manager.snapshot(include_spectrum=False).recording
+        if recording.exporting or self._export_worker is not None:
+            return
+        service = self.runtime.command_service
+        result = service.stop_binary_recording() if recording.active else service.start_binary_recording()
         self.set_notice(result.message)
-        self.refresh_view()
-
-    def stop_binary_recording(self, *_args) -> None:
-        """Purpose: stop authoritative dense binary capture. Rationale: flushing should be explicit before conversion."""
-        result = self.runtime.command_service.stop_binary_recording()
-        self.set_notice(result.message)
-        self.refresh_view()
-
-    def convert_last_binary_recording_to_csv(self, *_args) -> None:
-        """Purpose: convert the last HDF5 recording to CSV. Rationale: CSV export should read from stored binary arrays."""
-        result = self.runtime.command_service.convert_last_binary_recording_to_csv()
-        self.set_notice(result.message)
-        self.refresh_view()
-
-    def reset_session(self, *_args) -> None:
-        """Purpose: clear the current session buffer. Rationale: users often want a fresh capture run without restarting the app."""
-        self.runtime.session_manager.reset()
-        self.runtime.command_service.refresh_session_status()
-        self.set_notice("Session buffer cleared.")
         self.refresh_view()
 
     def step_integration(self, direction: int) -> None:
@@ -2421,14 +2412,6 @@ class DesktopSpectrometerApp(App):
             return
         result = self.runtime.command_service.integration.request(us)
         self.set_notice(result.message)
-
-    def send_raw_command(self, *_args) -> None:
-        """Purpose: send a raw command string to the device. Rationale: advanced control and debugging should be available from the UI."""
-        if self.command_input is None:
-            return
-        result = self.runtime.command_service.send_raw_command(self.command_input.text)
-        self.set_notice(result.message)
-        self.refresh_view()
 
     @staticmethod
     def _graph_mode_display_text(mode: str) -> str:
@@ -2801,6 +2784,22 @@ class DesktopSpectrometerApp(App):
         with monitor.measure("ui.refresh_status"):
             monitor.increment("ui.refresh_status_calls")
             snapshot = self.runtime.state_manager.snapshot(include_spectrum=False)
+            recording = snapshot.recording
+            exporting = recording.exporting or self._export_worker is not None
+            if self._recording_button is not None:
+                self._recording_button.text = (
+                    COMMAND_CARD_STOP_BINARY_BUTTON_TEXT if recording.active else COMMAND_CARD_START_BINARY_BUTTON_TEXT
+                )
+                self._recording_button.background_color = (
+                    STOP_RECORDING_BUTTON_BACKGROUND_RGBA if recording.active else BUTTON_BACKGROUND_RGBA
+                )
+                self._recording_button.disabled = exporting
+            if self._export_session_button is not None:
+                self._export_session_button.disabled = (
+                    recording.active or recording.failed or recording.frame_count == 0 or exporting
+                )
+            if recording.export_percent is not None:
+                self.set_notice(f"Exporting session… {recording.export_percent}%")
             if self.integration_status is not None:
                 us = snapshot.device.integration_us
                 rate = f"{1_000_000 / frame_interval_us(us):.6g} Hz" if us else "unknown rate"
@@ -3506,7 +3505,6 @@ class DesktopSpectrometerApp(App):
         short_layout = Window.height < SHORT_HEIGHT_BREAKPOINT
         compact_layout = Window.width < COMPACT_BREAKPOINT or short_layout
         stack_connection_buttons = Window.width < BUTTON_STACK_BREAKPOINT
-        stack_session_buttons = Window.width < BUTTON_STACK_BREAKPOINT
         stacked_side_panel_height = min(dp(320), max(dp(180), Window.height * 0.30))
         self._body.orientation = "vertical" if narrow_layout else "horizontal"
         self._body.spacing = APP_GAP if self._side_panel_visible else 0
@@ -3526,14 +3524,6 @@ class DesktopSpectrometerApp(App):
                 if stack_connection_buttons
                 else BUTTON_HEIGHT
             )
-        if self._session_buttons is not None:
-            self._session_buttons.orientation = "vertical" if stack_session_buttons else "horizontal"
-            self._session_buttons.height = (
-                (NARROW_BUTTON_HEIGHT * len(self._session_buttons.children)) + (CARD_GAP * (len(self._session_buttons.children) - 1))
-                if stack_session_buttons
-                else BUTTON_HEIGHT
-            )
-
         title_font_sp = COMPACT_TITLE_FONT_SP if compact_layout else TITLE_FONT_SP
         section_font_sp = COMPACT_SECTION_TITLE_FONT_SP if compact_layout else SECTION_TITLE_FONT_SP
         body_font_sp = COMPACT_BODY_FONT_SP if compact_layout else BODY_FONT_SP

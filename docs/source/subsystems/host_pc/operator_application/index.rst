@@ -14,7 +14,7 @@ The Operator Application translates complex instrument data streams into an acce
 * **Interactive Visualization:** Real-time line plotting with mouse cursor readouts and rolling 2D waterfall spectrograms.
 * **Decoupled Cadence:** Operates at approximately 30 FPS to provide smooth user interaction while background threads process full 125 Hz streaming.
 * **Calibration Workflows:** One-click dark/bias capture, live algorithm toggles, and polynomial wavelength fitting.
-* **Dual-Mode Data Export:** Instant CSV export from rolling memory buffers alongside high-speed binary disk recording.
+* **Session Export:** Full-rate HDF5 recording and ZIP export of frame data and calibration history.
 
 .. _uuid-6036bb15-b648-4643-a82f-44bc18209cd1:
 
@@ -29,13 +29,13 @@ UUID: :ref:`6036BB15-B648-4643-A82F-44BC18209CD1 <uuid-6036bb15-b648-4643-a82f-4
    * - Section
      - Core Responsibilities
    * - :doc:`session_control`
-     - Operator session workflow, start/stop/reset actions, and in-memory circular buffer sizing.
+     - Recording and export controls, with recent-frame buffers for bias capture and display.
    * - :doc:`visualization`
      - Decoupled 30 FPS line spectrum plotting, 256-bin rolling spectrogram, and configurable dynamic ceiling scaling.
    * - :doc:`calibration_and_user_settings`
      - Dark subtraction toggles, master bias capture, wavelength reference point editing, and JSON configuration storage.
    * - :doc:`export_initiation_and_session_retention`
-     - In-memory 14-column CSV session export and high-speed Dense Binary Recording direct to disk with offline conversion.
+     - Dense HDF5 recording and post-recording export of measurement CSV and calibration JSON in one ZIP.
 
 .. toctree::
    :maxdepth: 1

@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import argparse
 import tempfile
+import struct
+import zlib
 from pathlib import Path
 from time import perf_counter, time_ns
 
 import numpy as np
 
 from backend.device.packet_reader import DeviceStreamReader
-from backend.device.protocol import FRAME_HEADER_STRUCT, PACKET_MAGIC, PACKET_TYPE_FRAME, PACKET_VERSION
+from backend.device.protocol import FRAME_V3_HEADER_STRUCT, PACKET_MAGIC, PACKET_TYPE_FRAME, PACKET_VERSION
 from backend.models.config import CalibrationConfig, DeviceConfig
 from backend.models.frames import BinaryFramePacket
 from backend.storage.binary_capture import (
@@ -22,7 +24,7 @@ from backend.storage.binary_capture import (
 
 def _build_synthetic_packet_bytes(frame_id: int, adc_counts: np.ndarray) -> bytes:
     payload = np.asarray(adc_counts, dtype="<u2").tobytes()
-    header = FRAME_HEADER_STRUCT.pack(
+    header = FRAME_V3_HEADER_STRUCT.pack(
         PACKET_MAGIC,
         PACKET_VERSION,
         PACKET_TYPE_FRAME,
@@ -34,8 +36,10 @@ def _build_synthetic_packet_bytes(frame_id: int, adc_counts: np.ndarray) -> byte
         0x0001,
         len(payload),
         10,
+        65537,
     )
-    return header + payload
+    body = header + payload
+    return body + struct.pack('<I', zlib.crc32(body))
 
 
 def run_benchmark(path: Path, *, frames: int, sample_count: int, target_fps: float) -> int:
@@ -95,7 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Dense binary capture tools for VIS-NIR spectrometer HDF5 files.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    convert = subparsers.add_parser("convert", help="Convert a dense HDF5 capture to long-table CSV.")
+    convert = subparsers.add_parser("convert", help="Extract frame measurements from a dense HDF5 capture to CSV.")
     convert.add_argument("hdf5_path", type=Path)
     convert.add_argument("--csv", type=Path, default=None, help="Output CSV path. Defaults to the HDF5 path with .csv suffix.")
     convert.add_argument("--chunk-frames", type=int, default=DEFAULT_CHUNK_FRAMES)

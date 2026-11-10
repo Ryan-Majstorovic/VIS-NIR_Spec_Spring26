@@ -114,15 +114,15 @@ comparison.
 
 .. _integration-traceability-2bedc9a3:
 
-``2BEDC9A3`` defines the required CSV data-product handoff.
+``2BEDC9A3`` traces the session archive data-product handoff.
 
 **Alignment state:** ``Not Started``
 
 **Requirements evidence:** Requirements And Metrics export fields; approved
 Host PC retention and export pages.
 
-**Future implementation location:** TODO: identify the session-retention and
-CSV-export locations during the later implementation comparison.
+**Future implementation location:** TODO: identify the HDF5 capture and
+session export locations during the later implementation comparison.
 
 .. _integration-traceability-7205fdb2:
 
