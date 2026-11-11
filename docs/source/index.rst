@@ -10,7 +10,6 @@ course-deliverable material is intentionally outside this documentation set.
    :maxdepth: 1
    :caption: System
 
-   Technical Source Notes
    System Overview
    Requirements And Metrics
    Calibration And Characterization
@@ -22,7 +21,6 @@ course-deliverable material is intentionally outside this documentation set.
 
    Optics System Overview <subsystems/optics/overview>
    subsystems/optics/optical_path/czerny_turner/Optics Architecture
-   subsystems/optics/verification/Optics Verification
 
 .. toctree::
    :maxdepth: 1

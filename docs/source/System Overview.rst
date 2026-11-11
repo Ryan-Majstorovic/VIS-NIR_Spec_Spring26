@@ -3,42 +3,40 @@ System Overview
 
 UUID: ``3F2D4CB8-9372-43E9-B29B-70643C4E64C5``
 
-The VIS-NIR spectrometer converts incident light over the target 400-1000 nm
-range into calibrated data on a host computer. The technical system is divided
-into four coupled areas:
+The VIS-NIR spectrometer converts light delivered by fiber into a calibrated
+spectrum on a host computer. The client-approved operating band for this stage
+is approximately 400 nm to 800 nm, set by the B&W Tek optical bench the
+client provided in place of the original 400 nm to 1000 nm custom design. The
+system has three subsystems and one verification activity:
 
-* The optical path accepts light through a slit, collimates it, disperses it
-  with a reflective grating, focuses the spectrum, and images it onto the
-  TCD1304DG linear CCD.
-* The embedded acquisition system drives the CCD timing signals with an
-  STM32F411CEU6, samples the analog output with ADC1, fills a DMA frame buffer,
-  and streams frames over USB CDC.
-* The host-PC application receives mixed text and binary USB CDC data, rebuilds
-  ``CCD1`` frame packets, applies calibration, displays live spectra, and
-  exports measurement sessions.
-* Integration and characterization connect the optical alignment, embedded
-  timing, USB transfer, and host-side calibration into one measurement chain.
+* **Optics:** the B&W Tek compact Czerny-Turner bench disperses the light from
+  the entrance slit and focuses it onto the TCD1304DG linear CCD.
+* **Embedded:** an STM32F411CEU6 drives the CCD timing signals, samples the
+  analog output with ADC1 into a DMA frame buffer, and streams ``CCD1``
+  frames over USB CDC.
+* **Host PC:** the Python application rebuilds frames, applies calibration,
+  displays live spectra, and exports CSV sessions.
+* **Test and Verification:** compares the calibrated prototype with a
+  commercial reference spectrometer using the laser calibration unit and LED
+  sources.
 
-The current firmware packet geometry is 3694 total samples per frame: 32 leading
-dummy samples, 3648 effective CCD pixels, and 14 trailing dummy samples. The
-host app preserves raw ADC samples for export and produces processed display
-values through the calibration pipeline.
+Each firmware frame carries 3694 samples: 32 leading dummy samples, 3648
+effective CCD pixels, and 14 trailing dummy samples. The Host PC keeps the raw
+ADC samples for export alongside the processed values.
 
 End-to-End Measurement Chain
 ----------------------------
 
-1. Light enters the slit or fiber-coupled input.
-2. The Czerny-Turner optical path disperses first-order wavelengths across the
-   CCD active region.
-3. The TCD1304DG outputs a sequential analog waveform.
-4. The STM32 ADC samples the waveform on timer-triggered conversions.
-5. DMA writes one frame into memory.
-6. Firmware packages the samples into a ``CCD1`` binary USB CDC frame.
-7. The host parser validates the frame header and payload.
-8. The host processing path applies dark/bias, wavelength, flat-field, and
-   response corrections when configured.
-9. The UI displays a line spectrum or rolling spectrogram.
-10. CSV export writes raw and derived columns for downstream analysis.
-
-
-
+1. A source (calibration unit, LED, or sample light) feeds the SMA fiber,
+   joined by an ADASMA sleeve to the M14L01 patch cable.
+2. The fiber delivers light to the bench's entrance slit.
+3. The Czerny-Turner bench disperses first-order light across the CCD's
+   effective pixels.
+4. The TCD1304DG outputs a sequential analog waveform.
+5. The STM32 ADC samples the waveform on timer-triggered conversions, and DMA
+   writes one frame into memory.
+6. Firmware packages the frame as a ``CCD1`` binary USB CDC packet.
+7. The Host PC validates the packet and applies bias and dark correction,
+   the pixel-to-wavelength map, and any configured intensity corrections.
+8. The application displays a line spectrum or rolling spectrogram.
+9. CSV export writes raw and derived columns for analysis.

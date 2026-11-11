@@ -3,23 +3,22 @@ Traceability
 
 UUID: ``2A4E1306-71B5-4D29-82AE-0138479CCBF6``
 
-Traceability IDs link requirements and design claims to source files, test
-artifacts, and physical optics artifacts. Source code uses ``DOC-UUID`` comments
-only at major files or major behavior blocks.
+Traceability IDs link design claims to the files and artifacts that implement
+or evidence them. Source code uses ``DOC-UUID`` comments only at major files
+or behavior blocks.
 
 .. list-table::
    :header-rows: 1
 
    * - UUID
      - Area
-     - Requirement Or Claim
+     - Claim
      - Source / Evidence
    * - ``0F0D41FE-6F7B-4A3E-A8DD-3C1F7DCE2481``
      - Optics
-     - Czerny-Turner reflective layout disperses 400-1000 nm light onto the
-       TCD1304DG active pixels.
-     - Design document optics sections; future optical layout diagram, BOM,
-       alignment procedure, and wavelength-map test data.
+     - The B&W Tek Czerny-Turner bench disperses approximately 400-800 nm
+       light onto the TCD1304DG effective pixels.
+     - Optics Architecture page; OPT-2 and OPT-4 test records.
    * - ``9F6C2C68-53B8-4B6B-BB9F-42068A583BF3``
      - Embedded
      - STM32F411 firmware captures 3694-sample frames and streams ``CCD1``
@@ -33,7 +32,7 @@ only at major files or major behavior blocks.
    * - ``552FD33D-F11F-41B7-B520-81E940994448``
      - Calibration
      - Host processing applies dark/bias, wavelength, intensity, and response
-       corrections before live display/export.
+       corrections before live display and export.
      - ``PythonGUI/backend/processing/spectrum_builder.py`` and calibration
        config models.
    * - ``76A44D70-6073-458A-A7D6-5AC9AF4E7B77``
@@ -52,15 +51,26 @@ only at major files or major behavior blocks.
      - CSV export writes raw and derived spectrum columns.
      - ``PythonGUI/backend/storage/export_csv.py``.
    * - ``C6B4929A-5CFB-46E8-A592-FD75E67ED745``
-     - Integration
-     - Standalone COM inspector validates USB CDC stream rate and frame
-       integrity.
+     - Test
+     - Standalone COM inspector checks USB CDC frame rate and frame
+       integrity (test EMB-2).
      - ``Spectrometer-COM-Inspector/spectrometer_com_inspector.py`` and README.
 
-Future optics-only artifacts should reuse the optics UUID above until separate
-requirements need their own IDs. Examples include optical CAD, grating angle
-notes, long-pass filter measurements, breadboard photos, enclosure drawings, and
-reference-comparison datasets.
+Source Material
+---------------
 
+UUID: ``A0A18ED1-BA3C-41FC-B8E6-A4C5BBD5D251``
 
+This documentation draws on these technical sources:
 
+* The team design document (``SDDEC26-06_Team_Spectro_Design_Document``):
+  requirements, standards, calibration, and testing sections.
+* The team's reference-spectrometer comparison plan
+  (``SDDEC26-06_Spectrometer_Comparison_Plan``).
+* The repository ``README.md``, ``CCD-Driver-Code/STM32F411_Basic/readme.txt``
+  and firmware source, ``PythonGUI/README.md`` and ``PythonGUI/CODE_TOUR.md``,
+  and the ``Spectrometer-COM-Inspector`` README and source.
+
+Optics artifacts such as bench photographs, alignment notes, and filter
+measurements reuse the optics UUID above until a separate requirement needs
+its own ID.

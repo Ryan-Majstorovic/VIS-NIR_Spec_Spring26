@@ -8,24 +8,10 @@ UUID: ``0F0D41FE-6F7B-4A3E-A8DD-3C1F7DCE2481``
 .. _Thorlabs M14L01: https://www.thorlabs.com/item/M14L01
 .. _Thorlabs ADASMA: https://www.thorlabs.com/item/ADASMA
 
-This page describes the hardware that carries out the design approach in the
-:doc:`Optics System Overview <../../overview>`: our test bench, its optical
-elements and their parameters, the grating's measured behavior, the component
-tradeoffs behind the design, second-order control, and alignment.
-
-The optical subsystem separates incident light by wavelength and images the
-resulting spectrum onto the TCD1304DG linear CCD through a reflective
-Czerny-Turner path:
-
-1. A slit defines the source width presented to the spectrometer.
-2. A collimating mirror forms a collimated beam.
-3. A reflective diffraction grating disperses the beam by wavelength.
-4. A focusing mirror images the dispersed spectrum onto the CCD.
-5. The TCD1304DG converts the focused spectrum into a sequential analog signal.
-
-Slit width, mirror placement, grating angle, and CCD position must be tuned
-together because they determine throughput, resolution, wavelength coverage,
-and alignment sensitivity.
+This page describes the hardware that carries out the design in the
+:doc:`Optics System Overview <../../overview>`: the test bench, its elements
+and parameters, the grating's supplied behavior, the component tradeoffs,
+second-order control, and alignment.
 
 .. _uuid-45725109-9bde-4f4d-9298-123e443f1d2a:
 
@@ -258,15 +244,13 @@ efficiency depends strongly on polarization: the parallel component falls from
 approximately 67% near 390 nm to below 10% near 1000 nm, while the
 perpendicular component stays between approximately 65% and 85% from 450 nm to
 1000 nm. Second, every curve has a local minimum near 400 nm, at the short end
-of our target range. Both effects belong in the response-correction workflow
-described in :ref:`Optical Component Tradeoffs
-<uuid-d5cfd390-4e80-489e-87b7-ce1fc5e2e11d>`.
+of our target range. Both effects shape the broadband
+comparison in test CMP-4 and belong in a future response correction.
 
-Whether a single grating angle places the full 400 nm to 1000 nm first-order
-band across the 3648-pixel effective array depends on the mirror focal lengths
-and the grating angle, which are ``Not In Docs``. We treat full-range coverage
-on this bench as unverified until test OPT-3 measures it, as described in
-:doc:`Optics Verification <../../verification/Optics Verification>`.
+The bench's observed coverage is approximately 400 nm to 800 nm. The exact
+limits depend on the mirror focal lengths and grating angle, which are
+``Not In Docs``, and are recorded by test OPT-2 in the :doc:`Test Plan
+<../../../test_and_verification/test_plan>`.
 
 .. _uuid-d5cfd390-4e80-489e-87b7-ce1fc5e2e11d:
 
@@ -275,8 +259,8 @@ Optical Component Tradeoffs
 
 UUID: :ref:`D5CFD390-4E80-489E-87B7-CE1FC5E2E11D <uuid-d5cfd390-4e80-489e-87b7-ce1fc5e2e11d>`
 
-**Summary:** The main grating tradeoff is between simple alignment and compact
-packaging.
+**Summary:** The grating options considered for the original custom bench are
+below. The B&W Tek bench uses the selected reflective blazed grating.
 
 .. list-table::
    :header-rows: 1
@@ -307,9 +291,9 @@ configuration to the response-correction workflow to correct the
 wavelength-dependent optical throughput of the measured spectrum.
 
 **Rationale:** Grating efficiency alone varies by more than a factor of six
-across the band for parallel polarization. Without these inputs, the response
-correction would attribute optical throughput losses to the source being
-measured.
+from 400 nm to 1000 nm for parallel polarization. Without these inputs, the
+response correction would attribute optical throughput losses to the source
+being measured.
 
 .. _uuid-406d13b5-12f2-4144-9f1e-c36e6d515fa0:
 
@@ -319,32 +303,20 @@ Second-Order Diffraction And Filtering
 UUID: :ref:`406D13B5-12F2-4144-9F1E-C36E6D515FA0 <uuid-406d13b5-12f2-4144-9f1e-c36e6d515fa0>`
 
 **Summary:** A grating diffracts wavelength λ in second order at the same
-angle as wavelength 2λ in first order, so short-wavelength light also lands on
-the long-wavelength part of the detector. In our 400 nm to 1000 nm band, any
-light from 400 nm to 500 nm can appear in second order at 800 nm to 1000 nm.
-With the calibration unit, the 405 nm laser is expected to produce a
-second-order peak near 810 nm.
+angle as 2λ in first order. Light from 400 nm to 500 nm can therefore land at
+800 nm to 1000 nm. In the current approximately 400 nm to 800 nm band this
+overlap reaches only the long edge of the array, near 800 nm to 810 nm, but it
+would cover the whole near-infrared region if coverage were extended toward
+1000 nm. Test OPT-5 measures the second-order 405 nm peak near 810 nm under
+criterion OPT-R5.
 
-Software-only correction is not sufficient as the primary mitigation because
-it requires knowing the original short-wavelength contribution and optical
-throughput accurately. Overlap should be reduced physically before any
-post-processing correction is applied. The planned physical mitigation is an
-order-sorting filter in front of the long-wavelength part of the detector:
-
-* A long-pass filter or a custom thin-film linear variable filter.
-* A cutoff matched to the detector position where second-order light begins.
-* Validation against the calibration lasers and a broadband source.
-
-**Requirement:** The Optics system shall measure the relative height of the
-second-order 405 nm peak near 810 nm before an order-sorting filter is
-selected, to set the filter's required attenuation.
-
-**Rationale:** The measured second-order height tells us how much the filter
-must suppress. Selecting a filter before this measurement risks either
-leaving false near-infrared signal or blocking real light without need.
-
-For the current scope, second-order behavior is observed only (test OPT-6).
-Filter selection and installation are future work.
+Software correction alone is not a reliable fix, because it requires knowing
+the short-wavelength contribution and the optical throughput accurately. The
+planned physical fix is an order-sorting filter over the long-wavelength part
+of the detector, either a long-pass filter or a linear variable filter, with
+its cutoff placed where second-order light begins and validated with the
+calibration sources and a broadband source. Filter selection and installation
+are future work.
 
 .. _uuid-c84aa8d3-91d6-42cf-a6e7-28e7edcf87ae:
 
@@ -364,14 +336,13 @@ Alignment priorities are:
 * Preserve the selected slit-width tradeoff between throughput and resolution.
 * Record grating, mirror, and CCD positions once a repeatable setup is found.
 
-**Requirement:** The Optics system shall keep the housing lid closed and the
-detector port sealed around the driver board during every measurement to
-block ambient light from reaching the detector.
+During measurement the lid stays closed and the detector port stays sealed,
+as required by OPT-R6.
 
-**Rationale:** Ambient light adds a time-varying background that a dark frame
-taken at a different moment does not remove, which biases every intensity
-measurement.
+**Requirement:** The Optics system shall keep the B&W Tek housing as its
+enclosure until the bench passes the OPT-2 coverage and OPT-4 resolution
+tests, and any custom enclosure shall preserve the slit, mirror, grating, and
+detector positions recorded at that point.
 
-A custom enclosure is future work. Its constraints should be introduced only
-after the current bench meets the wavelength coverage and FWHM targets, so
-that the enclosure preserves a geometry already known to work.
+**Rationale:** Designing an enclosure around an unproven geometry risks
+fixing an alignment that does not meet the coverage or resolution targets.

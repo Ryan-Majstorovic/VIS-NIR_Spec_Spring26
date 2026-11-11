@@ -9,78 +9,43 @@ Overview
 
 UUID: :ref:`4675CD82-C766-4D59-8AEC-C8CDACE41275 <uuid-4675cd82-c766-4d59-8aec-c8cdace41275>`
 
-**Summary:** Test and Verification defines requirement-linked verification
-methods, acceptance-criterion readiness, evidence records, regression triggers,
-and unresolved verification work. This first-run section is a planned
-specification; all activity and result records remain ``Not Started``.
+**Summary:** Test and Verification decides whether the prototype meets its
+documented limits. The core of the plan is a side-by-side comparison with a
+commercial reference spectrometer: the reference establishes the true
+wavelengths of the calibration sources, the prototype is calibrated against
+them, and both instruments then measure the same LED and broadband sources.
 
-**Local Traceability ID:** :ref:`0647B389 <trace-0647b389>`
+* :doc:`Test Plan <test_plan>` lists every test, its pass criterion, and the
+  measurements deferred beyond this semester.
+* :doc:`Comparison Procedure <procedure>` gives the run order, the
+  matched-condition rules, and the contents of a test record.
+* :doc:`Calculations <calculations>` defines every derived number.
 
-**Expected Outcome:** Each technical requirement can be connected to a planned
-method, a documented or unresolved criterion, and a future evidence package.
+**Requirement:** The Test and Verification system shall take its pass limits
+only from ``Requirements And Metrics.rst`` and shall record ``Not In Docs``
+where a test has no documented limit.
 
-.. _uuid-f6a37754-2f47-42ec-bfd3-fa42931d42e3:
-
-Requirements-First Authority
-----------------------------
-
-UUID: :ref:`F6A37754-2F47-42EC-BFD3-FA42931D42E3 <uuid-f6a37754-2f47-42ec-bfd3-fa42931d42e3>`
-
-The defining sources are ``Requirements And Metrics.rst``, approved
-subsystem intended-behavior pages, and
-``Calibration And Characterization.rst``. Reference standards may guide a
-method but do not create new project thresholds. Code, test implementations,
-logs, captures, and unreviewed measurements are outside this first-run
-authority boundary.
+**Rationale:** A limit chosen while looking at the data can be set to make a
+result pass. Holding limits to the documented requirements keeps each result
+an honest test of the design.
 
 .. _uuid-7c35f02d-e592-4b12-ad80-bdd5758f6876:
 
-Status Vocabulary
------------------
+Status Values
+-------------
 
 UUID: :ref:`7C35F02D-E592-4B12-AD80-BDD5758F6876 <uuid-7c35f02d-e592-4b12-ad80-bdd5758f6876>`
 
-* **Documented:** The requirement or intended behavior exists in the
-  authoritative Sphinx documentation.
-* **Planned:** A verification method is specified, but no execution claim is
-  made.
-* **Not Started:** Required verification work has no reviewed evidence record.
-* **Not In Docs:** A criterion, condition, method detail, or evidence rule is
-  unresolved in the authoritative documentation.
-* **Future result disposition:** ``Pass``, ``Fail``, or
-  ``Inconclusive`` may be assigned only in a reviewed future evidence
-  record.
-
-.. _uuid-ea26ccf8-0c4d-423b-8b9b-0623051d25a3:
-
-Ownership Boundaries
---------------------
-
-UUID: :ref:`EA26CCF8-0C4D-423B-8B9B-0623051D25A3 <uuid-ea26ccf8-0c4d-423b-8b9b-0623051d25a3>`
-
-* Integration owns interface contracts and interface checkpoints.
-* Test and Verification owns system-level methods, evidence packages,
-  calculations, criterion readiness, and result disposition rules.
-* Host PC and Embedded own behavior-local tests.
-* Calibration and Characterization defines what is calibrated or
-  characterized; this section defines how evidence is planned and reviewed.
-* Optical readiness remains a dependency for full-system characterization.
-
-.. note::
-
-   The I/O and state-machine Visio files are intentionally empty.
-   This section defines a lifecycle, not a verification state machine.
-
-Related Pages
--------------
+* **Planned:** The method and criterion are documented; no result is
+  claimed.
+* **Pass**, **Fail**, **Inconclusive:** Assigned from a complete test record
+  as described in :ref:`Result Disposition
+  <uuid-bd53c5b6-b340-46b1-b46e-7458d173321b>`.
 
 .. toctree::
    :maxdepth: 1
+   :hidden:
 
-   inputs_and_outputs
+   test_plan
    procedure
-   diagnostics
-   demo_test_plan
-   testing
    calculations
-   validation
