@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from backend.models.config import UserConfig
+from backend.models.config import CursorConfig, UserConfig
 
 
 class ConfigStore:
@@ -27,3 +27,16 @@ class ConfigStore:
             encoding="utf-8",
         )
         return self._active_path
+
+    def save_cursor(self, cursor: CursorConfig) -> Path:
+        """Persist the cursor preferences alongside the saved user settings."""
+        config = self.load()
+        config.ui.cursor = cursor
+        return self.save(config)
+
+    def save_integration_preference(self, us: int, unit: str) -> Path:
+        """Save the confirmed exposure alongside the other saved settings."""
+        config = self.load()
+        config.ui.integration_us = us
+        config.ui.integration_unit = unit
+        return self.save(config)

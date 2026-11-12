@@ -57,6 +57,7 @@ void configure(uint32_t us) {
   hadc1.Instance = ADC1;
   TIM1->ARR = CCD_MASTER_PERIOD_TICKS - 1U;
   TIM1->CCR1 = CCD_MASTER_HIGH_TICKS;
+  TIM2->CCER = TIM_CCER_CC1E;
   StartTiming(us);
 }
 ''')
@@ -127,6 +128,8 @@ void configure(uint32_t us) {
                     self.assertEqual(self.read(timer + 0x20) & 3, 3)  # Invert to cancel board U1.
                     self.assertEqual(self.read(timer + 0x08) & 0x77, 6)  # Trigger mode, ITR0=TIM1.
                 self.assertEqual(self.read(tim2 + 0x08) & 0x77, 0x36)  # ADC starts from TIM4, SH does not.
+                self.assertEqual(self.read(tim2 + 0x20) & 1, 0)  # No external ADC trigger output.
+                self.assertEqual(self.read(tim2 + 0x24), 173)  # Seed for the advanced internal trigger.
                 n = (us + 31999) // 32000 if us > 8000 else 1
                 initial_sh_arr = (us // n) * 2 - 1
                 self.assertEqual(self.read(tim3 + 0x24), initial_sh_arr)

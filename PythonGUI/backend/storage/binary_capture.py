@@ -163,7 +163,7 @@ class DenseFrameProcessor:
         )
         wavelengths = indices_to_wavelengths(
             self.sample_indices,
-            self.calibration_config.wavelength_coefficients,
+            self.calibration_config.effective_wavelength_coefficients,
         ).astype(np.float64, copy=False)
         qe_correction = _build_qe_correction(self.calibration_config, wavelengths)
         correction_factor = system_response * qe_correction

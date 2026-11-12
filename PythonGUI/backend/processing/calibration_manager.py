@@ -46,6 +46,7 @@ class CalibrationManager:
         points: Sequence[PixelMappingPoint],
         *,
         fit_order: int,
+        device_config: DeviceConfig | None = None,
     ) -> list[float]:
         """Purpose: fit wavelength polynomial coefficients from reference lines. Rationale: the calibration manager should turn user-entered pixel mappings into the polynomial used everywhere else."""
         if not points:
@@ -54,8 +55,23 @@ class CalibrationManager:
         fit_degree = max(0, min(int(fit_order), len(points) - 1))
         pixels = np.asarray([point.pixel_index for point in points], dtype=float)
         wavelengths = np.asarray([point.wavelength_nm for point in points], dtype=float)
+        if fit_degree < 1 or np.unique(pixels).size <= fit_degree:
+            raise ValueError("Use a positive fit order and more distinct detector pixels than the fit order.")
         coefficients_desc = np.polyfit(pixels, wavelengths, deg=fit_degree)
-        return coefficients_desc[::-1].tolist()
+        coefficients = coefficients_desc[::-1].tolist()
+        device = device_config if device_config is not None else DeviceConfig()
+        start = device.effective_start_index
+        active_wavelengths = indices_to_wavelengths(
+            range(start, start + device.effective_sample_count), coefficients,
+        )
+        steps = np.diff(active_wavelengths)
+        if (
+            not len(steps)
+            or not np.all(np.isfinite(active_wavelengths))
+            or not (np.all(steps > 0) or np.all(steps < 0))
+        ):
+            raise ValueError("The wavelength map must increase or decrease across all active pixels.")
+        return coefficients
 
     def build_quantum_efficiency_curve(
         self,
@@ -131,7 +147,7 @@ class CalibrationManager:
 
         wavelengths = indices_to_wavelengths(
             sample_indices,
-            self._config.wavelength_coefficients,
+            self._config.effective_wavelength_coefficients,
         )
         if self._config.apply_quantum_efficiency_correction:
             corrected_curve = self.build_quantum_efficiency_curve(wavelengths)

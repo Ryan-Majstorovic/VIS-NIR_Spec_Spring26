@@ -60,9 +60,9 @@ Normative Requirements
 
 .. _uuid-d0e1f2a3-b4c5-46d7-e8f9-001122334455:
 
-**Requirement:** The Host PC Wavelength Mapping system shall verify that the evaluated wavelength array is strictly monotonically increasing (:math:`\lambda[p+1] > \lambda[p]`) across the active pixel range :math:`[0, 3647]` before accepting a fitted calibration curve.
+**Requirement:** The Host PC Wavelength Mapping system shall accept a fitted wavelength map only when the evaluated wavelengths strictly increase across every adjacent pair of active detector pixels or strictly decrease across every pair.
 
-   **Rationale:** In a standard Czerny-Turner spectrometer configuration, physical dispersion must progress monotonically across the linear array; non-monotonic fits indicate erroneous peak assignments or unconstrained polynomial divergence.
+   **Rationale:** The detector orientation determines the direction of dispersion. A consistent direction preserves a unique wavelength ordering across the active detector.
 
 .. _uuid-e1f2a3b4-c5d6-47e8-f9a0-112233445566:
 
@@ -103,7 +103,7 @@ Diagnostics & Error Qualification
 ---------------------------------
 
 * **Insufficient Points:** If the user attempts to fit an :math:`n`-th order polynomial with fewer than :math:`n+1` reference points, the fit is rejected and an error is returned.
-* **Non-Monotonic Derivative:** If :math:`\frac{d\lambda}{dp} \le 0` anywhere in the range :math:`p \in [0, 3647]`, the solver rejects the fit and alerts the user of potential inverted line pairing.
+* **Wavelength direction:** Verify that the solver accepts both increasing and decreasing maps and rejects a map with equal adjacent wavelengths or a change of direction within the active detector.
 
 Verification & Testing
 ----------------------

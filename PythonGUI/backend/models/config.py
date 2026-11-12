@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, FiniteFloat
 
 DEFAULT_SERIAL_TIMEOUT_S = 0.1
 DEFAULT_TOTAL_SAMPLE_COUNT = 3694
@@ -17,6 +17,10 @@ DEFAULT_MAX_SESSION_FRAMES = 500
 DEFAULT_WAVELENGTH_COEFFICIENTS = [0.0, 1.0]
 DEFAULT_WAVELENGTH_FIT_ORDER = 3
 DEFAULT_BIAS_CAPTURE_FRAME_COUNT = 8
+DEFAULT_SATURATION_CAPTURE_FRAME_COUNT = 8
+SATURATION_CAPTURE_INTEGRATION_US = 1_000_000
+SATURATION_WARNING_MARGIN = 0.125
+SATURATION_MIN_SPAN_FRACTION = 0.05
 DEFAULT_QE_NORMALIZATION_WAVELENGTH_NM = 550.0
 DEFAULT_DISPLAY_NORMALIZATION_MODE = "absolute_saturation"
 DEFAULT_LIVE_GRAPH_MODE = "spectrum"
@@ -40,6 +44,21 @@ class DeviceConfig(BaseModel):
     adc_reference_volts: float = DEFAULT_ADC_REFERENCE_VOLTS
 
 
+class CursorConfig(BaseModel):
+    """Appearance and peak-search preferences shared by the spectrum cursors."""
+
+    line_thickness: float = Field(default=1.0, ge=1, le=4, multiple_of=0.5)
+    line_style: Literal["solid", "dashed", "point_only"] = "solid"
+    point_size: Literal["small", "standard", "large"] = "standard"
+    inactive_opacity_percent: int = Field(default=65, ge=25, le=90, multiple_of=5)
+    palette: Literal["current", "high_contrast"] = "current"
+    readout_size: Literal["small", "standard", "large"] = "standard"
+    readout_visibility: Literal["all", "selected_reference"] = "all"
+    show_difference: bool = True
+    swap_reference_on_double_click: bool = True
+    peak_sensitivity_percent: float = Field(default=1.0, ge=0, le=100)
+
+
 class UIConfig(BaseModel):
     """Purpose: store UI timing and session buffer settings. Rationale: performance-related choices should be easy to tune."""
     refresh_interval_ms: int = DEFAULT_UI_REFRESH_INTERVAL_MS
@@ -47,6 +66,10 @@ class UIConfig(BaseModel):
     max_session_frames: int = DEFAULT_MAX_SESSION_FRAMES
     live_graph_mode: Literal["spectrum", "spectrogram"] = DEFAULT_LIVE_GRAPH_MODE
     spectrogram_time_window_s: float = DEFAULT_SPECTROGRAM_TIME_WINDOW_S
+    reverse_horizontal_axis: bool = False
+    raw_adc_view: bool = False
+    integration_us: int = 100
+    integration_unit: Literal["µs", "ms", "s"] = "µs"
     show_command_card: bool = True
     show_diagnostics_card: bool = True
     show_performance_card: bool = False
@@ -55,7 +78,7 @@ class UIConfig(BaseModel):
     show_frame_data_edge: bool = True
     show_frame_data_refresh: bool = True
     show_frame_data_session: bool = True
-    show_frame_data_cursor: bool = True
+    cursor: CursorConfig = Field(default_factory=CursorConfig)
 
 
 class UserConfig(BaseModel):
@@ -77,11 +100,40 @@ class SpectralResponsePoint(BaseModel):
     relative_value: float
 
 
+class SaturationReference(BaseModel):
+    """White-light limit and dark baseline in raw ADC counts."""
+
+    raw_counts: list[FiniteFloat]
+    dark_baseline: list[FiniteFloat]
+    timing_profile_id: int
+    effective_start_index: int
+    effective_sample_count: int
+    adc_resolution_bits: int
+    frame_count: int = Field(gt=0)
+
+    def matches(self, profile: int | None, count: int, start: int, active: int, bits: int) -> bool:
+        return (
+            profile == self.timing_profile_id
+            and count == len(self.raw_counts) == len(self.dark_baseline)
+            and start == self.effective_start_index
+            and active == self.effective_sample_count
+            and 0 <= start < start + active <= count
+            and bits == self.adc_resolution_bits
+        )
+
+
+class SaturationPlotReference(SaturationReference):
+    """Averaged capture with a trimmed active-pixel limit for the live plot."""
+
+    plateau_adc: FiniteFloat
+
+
 class CalibrationConfig(BaseModel):
     """Purpose: store calibration choices and correction arrays. Rationale: signal correction should be data-driven, not hard-coded."""
     apply_dark_subtraction: bool = True
     apply_intensity_correction: bool = True
     apply_quantum_efficiency_correction: bool = False
+    apply_wavelength_mapping: bool = True
     display_normalization_mode: Literal["auto_peak", "absolute_saturation"] = DEFAULT_DISPLAY_NORMALIZATION_MODE
     wavelength_coefficients: list[float] = Field(default_factory=lambda: list(DEFAULT_WAVELENGTH_COEFFICIENTS))
     wavelength_fit_order: int = DEFAULT_WAVELENGTH_FIT_ORDER
@@ -89,12 +141,23 @@ class CalibrationConfig(BaseModel):
     bias_capture_frame_count: int = DEFAULT_BIAS_CAPTURE_FRAME_COUNT
     bias_counts: list[float] = Field(default_factory=list)
     bias_timing_profile_id: int | None = None
+    bias_integration_us: int | None = None
     dark_offset_counts: list[float] = Field(default_factory=list)
     dark_integration_us: int | None = None
     dark_timing_profile_id: int | None = None
+    saturation_reference: SaturationReference | None = None
+    saturation_plot_reference: SaturationPlotReference | None = None
+    use_calibrated_saturation_scale: bool = True
+    show_potential_saturation_warning: bool = True
     intensity_correction: list[float] = Field(default_factory=list)
     quantum_efficiency_points: list[SpectralResponsePoint] = Field(default_factory=list)
     quantum_efficiency_normalization_wavelength_nm: float | None = DEFAULT_QE_NORMALIZATION_WAVELENGTH_NM
+
+    @property
+    def effective_wavelength_coefficients(self) -> list[float]:
+        if self.apply_wavelength_mapping:
+            return self.wavelength_coefficients
+        return DEFAULT_WAVELENGTH_COEFFICIENTS
 
 
 def has_saved_wavelength_mapping(config: CalibrationConfig) -> bool:

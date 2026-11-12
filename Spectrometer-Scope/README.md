@@ -11,8 +11,10 @@ Use `--mode production` for a resolved timing zoom or `--mode productionoverview
 for the full readout. These commands observe the running production PWM clocks
 and its actual 3694-sample ADC frame at 500 kS/s. They retain exposure settings.
 The zoom briefly defers interrupts during GPIO observation while hardware timers,
-ADC and DMA continue. The scope response temporarily interrupts normal USB frame
-delivery; validate uninterrupted throughput in a separate run.
+ADC and DMA continue. Production profile `0x00010002` leaves PA5 in analog mode
+and uses TIM2's internal update trigger. Its ADC hold time is a register-based
+estimate and requires detector-side bench verification. The scope response
+temporarily interrupts normal USB frame delivery.
 
 ```powershell
 .\PythonGUI\.venv\Scripts\python.exe tools\build_ccd_firmware.py --output .scratch\production-timing\build
@@ -24,7 +26,7 @@ delivery; validate uninterrupted throughput in a separate run.
 Only one application can own COM3 at a time. Disconnect the desktop app before
 using scope capture. The production image uses corrected 8 us ICG-low timing,
 100 us startup integration, and CCD1 v3 CRC-protected packets with timing profile
-`0x00010001`. The `production_check.py` sweep ends at 100 us. Older diagnostic
+`0x00010002`. The `production_check.py` sweep ends at 100 us. Older diagnostic
 profiles below are separate comparisons and require the diagnostic image.
 
 ## What is observed

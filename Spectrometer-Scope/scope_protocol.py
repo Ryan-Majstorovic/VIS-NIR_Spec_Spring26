@@ -7,6 +7,7 @@ import zlib
 import numpy as np
 
 MAGIC = b"CSCP"
+ADC_TRIGGER_INTERNAL = 1 << 1
 HEADER = struct.Struct("<4sHH32I")
 FIELDS = (
     "capture_id cpu_hz logic_count adc_count logic_stride adc_first_delay_cycles "

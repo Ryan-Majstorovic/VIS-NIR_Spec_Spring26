@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 
@@ -55,13 +56,17 @@ def main():
     for fmt, ext in (("binary", ".bin"), ("ihex", ".hex")):
         subprocess.run([str(compiler.with_name("arm-none-eabi-objcopy" + compiler.suffix)),
                         "-O", fmt, str(elf), str(elf.with_suffix(ext))], check=True)
+    timing_header = (FIRMWARE / "Core/Inc/ccd_timing.h").read_bytes()
+    timing_profile = re.search(rb"(?m)^#define CCD_TIMING_PROFILE_ID (0x[0-9A-Fa-f]+)UL\b", timing_header)
+    if timing_profile is None:
+        raise RuntimeError("CCD timing profile ID is missing from ccd_timing.h.")
     (output / "manifest.json").write_text(json.dumps({
-        "firmware": "production", "abi": 3, "timing_profile_id": 65537,
+        "firmware": "production", "abi": 3, "timing_profile_id": int(timing_profile[1], 16),
         "compiler": str(compiler), "optimization": "O3",
         "elf_sha256": hashlib.sha256(elf.read_bytes()).hexdigest(),
         "bin_sha256": hashlib.sha256(elf.with_suffix('.bin').read_bytes()).hexdigest(),
         "source_sha256": source_hashes,
-        "timing_header_sha256": hashlib.sha256((FIRMWARE / 'Core/Inc/ccd_timing.h').read_bytes()).hexdigest(),
+        "timing_header_sha256": hashlib.sha256(timing_header).hexdigest(),
         "scope_observer_sha256": hashlib.sha256((FIRMWARE / 'Core/Src/production_scope.inc').read_bytes()).hexdigest(),
     }, indent=2))
     print(elf)

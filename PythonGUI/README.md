@@ -139,16 +139,18 @@ The side panel includes:
 - `Connection`: COM-port refresh, connect/disconnect, and live-display pause/resume
 - `Tools`: buttons for the calibration manager and display/layout manager
 - `Integration and Recording`: integration time, recording start and stop, and session export
-- `Frame Data`: frame, layout, edge-sample, refresh-rate, session, and cursor readouts
+- `Frame Data`: frame, layout, edge-sample, refresh-rate, and session readouts
 - `Performance`: optional timing and throughput report
 - `Diagnostics`: recent log messages
 
 The main display can show:
 
-- `Live Spectrum`: a processed line plot of the current effective pixels
+- `Live Spectrum`: a processed or raw ADC line plot with numbered markers, reference differences, and peak and valley searches
 - `Rolling Spectrogram`: a heatmap built from recent compact frame rows
 - `Calibration Manager`: the full calibration workflow
-- `Display & Layout`: graph-mode, spectrogram-window, side-panel, and frame-data visibility settings
+- `Display & Layout`: graph-mode, spectrogram-window, cursor, side-panel, and frame-data visibility settings
+
+Hover over supported connection, recording, calibration, and display controls for help. In the line plot, use **Add Marker** and click a point or run a search to place it. Use **More...** to set a reference marker or clear markers.
 
 ## Calibration Pipeline
 
@@ -194,15 +196,17 @@ The calibration manager is opened from `Tools` and gives the calibration workflo
 It currently supports:
 
 - live correction toggles in the Bias And Dark Terms, Flat-Field / PRNU, and QE / Response Curve cards
-- master bias `B_p` capture from recent covered-sensor frames
-- master bias and master-dark vector editing
+- guided master bias `B_p` capture from recent covered-sensor frames, with a spectrum and read-only averaged counts for review
+- master bias vector editing
 - manual pixel-to-wavelength mapping point entry
-- guided laser-diode mapping by clicking a peak on the plot and capturing that pixel
+- guided laser-diode mapping in a dialog where you add or remove wavelength rows before capture. Each capture step shows the target wavelength, live spectrum, and progress. Click a peak or use **Prev Peak** and **Next Peak**, then use the arrow keys to fine-tune the pixel. After the last peak, choose **Complete** to fit and save the wavelength calibration, or **Cancel Calibration** to discard the captured references.
 - fit order, active fit status, and **Fit Wavelength Map** in Wavelength Mapping
 - flat-field / PRNU correction factor entry
 - QE / response point entry and normalization wavelength selection
 
-The **Save Calibration** button in the manager header validates and applies manual correction edits, writes the calibration profile, and syncs user settings. Correction toggles, bias capture, timing assignment, and successful wavelength fits update the live display immediately.
+The guided bias, saturation, and wavelength routines use the same step header, preview area, progress indicator, and review controls. **Complete** saves the result for that routine and applies it to the live display. **Cancel Calibration** discards the staged capture.
+
+The **Save Calibration** button in the manager header validates and applies manual correction edits, writes the calibration profile, and syncs user settings. Correction toggles and manual wavelength fits update the live display immediately.
 
 Fit new or changed reference points before saving them. A successful fit switches the x-axis to wavelength when the map is active. Resetting the mapping or saving an empty point table restores pixel mode.
 
@@ -283,7 +287,7 @@ User config is structured as:
 - `ui.show_frame_data_edge`
 - `ui.show_frame_data_refresh`
 - `ui.show_frame_data_session`
-- `ui.show_frame_data_cursor`
+- `ui.cursor` for marker appearance, reference readouts, and search sensitivity
 
 Calibration config is structured as:
 
@@ -353,9 +357,25 @@ offsets must match both profile and integration time. Older calibration arrays
 remain saved but are bypassed for the corrected production profile.
 
 In **Display Manager**, choose **Raw ADC - full frame** to inspect all 3694
-samples on a 0–4095 scale. The plot status reports the nominal shielded-reference
+samples on a 0–4095 scale. **Diagnostics** reports the nominal shielded-reference
 median, its difference from the active median, and calibration compatibility.
-A shifted-reference warning is a screening heuristic, not proof of saturation.
+In **Calibration Manager**, start **Saturation Calibration** and wait for
+1 second integration to be confirmed. Shine a steady white light, such as a
+phone flashlight, through the SMA port and select **Confirm White Light**.
+The app checks that every active pixel is illuminated and that their raw ADC
+counts span at most 5% of full scale. Once the waveform passes, the app collects
+eight frames by default and restores the previous integration time. The dialog
+shows a live plot of the active pixels, read-only raw counts, and capture
+progress. After the exposure restore finishes, review the averaged counts and
+choose **Complete** to save the reference or **Cancel Calibration** to discard
+it. Use **Save Calibration** in the manager to persist changes to the two
+saturation switches.
+
+**Use calibrated limit for plot scaling** maps the measured limit at each
+active pixel to 1.0 in **Absolute Saturation** mode. **Show potential saturation
+warning** opens the banner when three adjacent active pixels reach at least
+87.5% of their calibrated signal spans. The banner also reports ADC clipping.
+**Diagnostics** reports shifts in the shielded reference.
 Capture a fresh covered baseline after the timing change. The nominal 32/3648/14
 mapping remains unchanged until sensor-pin timing and optical alignment are verified.
 

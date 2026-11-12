@@ -1,5 +1,6 @@
 """Timing checks against Toshiba Rev 1.5 pp. 5-8; never promote a model to a measurement."""
 import numpy as np
+from scope_protocol import ADC_TRIGGER_INTERNAL
 from scope_video import video_features
 
 DATASHEET = "https://toshiba.semicon-storage.com/info/docget.jsp?did=13709&prodName=TCD1304DG"
@@ -161,7 +162,12 @@ def validate(capture):
                 f"DMA complete {measured_completion:.3f} us; expected {predicted_completion:.3f} us; difference {completion_error:.3f} us",
                 "DWT timestamp in DMA completion ISR versus N timer triggers; 3 us ISR allowance, gross missed triggers detected, not an individual aperture measurement", "DMA timing + register projection")
     adc_rises = edge_indices(signals["ADC clock"])
-    if len(adc_rises) > 4 and uncertainty < period_adc/2:
+    if m["flags"] & ADC_TRIGGER_INTERNAL:
+        measured_period_adc = None
+        add("ADC clock output", "PASS" if not np.any(signals["ADC clock"]) else "FAIL",
+            "PA5 configured as analog with TIM2 CH1 disabled; ADC trigger is internal",
+            "Production firmware configuration and captured GPIO state", "MCU registers / GPIO")
+    elif len(adc_rises) > 4 and uncertainty < period_adc/2:
         measured_period_adc = float(np.polyfit(np.arange(len(adc_rises)), t[adc_rises], 1)[0])
         add("ADC clock output", "PASS" if abs(measured_period_adc-period_adc) < 0.02 else "FAIL",
             f"{1/measured_period_adc:.4f} MHz; {measured_period_adc:.4f} us period",

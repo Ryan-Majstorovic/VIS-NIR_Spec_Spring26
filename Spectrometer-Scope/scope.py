@@ -15,7 +15,7 @@ from serial.tools import list_ports
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from scope_protocol import Capture, HEADER, FIELDS, MODES, decode, read_capture
+from scope_protocol import ADC_TRIGGER_INTERNAL, Capture, HEADER, FIELDS, MODES, decode, read_capture
 from scope_validate import validate
 
 MODE_LABELS = {
@@ -146,7 +146,8 @@ def make_figure(capture, *, inferred=True, window="Full", cursor=None, auto_vide
         offset = 3 - lane
         # Plot raw observations. Long empty regions are not filled with a timer model.
         clocks.step(t, signal * 0.65 + offset, where="post", color=colors[lane], linewidth=0.75)
-    clocks.set_yticks([3.32, 2.32, 1.32, 0.32], ["phiM", "SH", "ICG", "ADC clock"])
+    trigger_label = "PA5 disabled" if m["flags"] & ADC_TRIGGER_INTERNAL else "ADC clock"
+    clocks.set_yticks([3.32, 2.32, 1.32, 0.32], ["phiM", "SH", "ICG", trigger_label])
     clocks.set_ylim(-0.15, 3.95)
     clocks.set_title("Detector logic INFERRED from board inversion" if inferred else "Measured MCU GPIO pads (PA8 / PA6 / PB6 / PA5)", loc="left", fontsize=10)
     clocks.set_xlabel("Time from observed ICG fall (us); ADC hold time estimated from registers")

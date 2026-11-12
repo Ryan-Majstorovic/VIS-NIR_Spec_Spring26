@@ -317,7 +317,11 @@ static void StartTiming(uint32_t integration_us)
       HAL_TIM_SlaveConfigSynchro(&htim4, &slave) != HAL_OK) ccd_timing_fault = 1U;
   slave.InputTrigger = TIM_TS_ITR3; /* TIM4 OC1REF rising is CCD ICG rising after U1 inversion. */
   if (HAL_TIM_SlaveConfigSynchro(&htim2, &slave) != HAL_OK) ccd_timing_fault = 1U;
+#ifdef CCD_SCOPE_DIAGNOSTIC
   TIM2->CCER |= TIM_CCER_CC1E;
+#else
+  TIM2->CCER &= ~TIM_CCER_CC1E; /* Production ADC uses the internal update TRGO. */
+#endif
   TIM3->SR = 0U;
   TIM4->SR = 0U;
   HAL_NVIC_ClearPendingIRQ(TIM4_IRQn);
@@ -671,7 +675,10 @@ int main(void)
   HAL_Delay(200);
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
   DWT->CYCCNT = 0U; DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-  SendStatusLine("USB CDC corrected timing firmware v3 profile 00010001\r\n");
+  char timing_status[72];
+  snprintf(timing_status, sizeof(timing_status), "USB CDC corrected timing firmware v3 profile %08lX\r\n",
+           (unsigned long)CCD_TIMING_PROFILE_ID);
+  SendStatusLine(timing_status);
   StartTiming(CCD_DEFAULT_INTEGRATION_US);
   /* USER CODE END 2 */
 
@@ -924,7 +931,6 @@ static void MX_TIM2_Init(void)
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_OC_InitTypeDef sConfigOC = {0};
 
   /* USER CODE BEGIN TIM2_Init 1 */
 
@@ -932,7 +938,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 191;
+  htim2.Init.Period = CCD_ADC_PERIOD_TICKS - 1U;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -954,6 +960,8 @@ static void MX_TIM2_Init(void)
   {
     Error_Handler();
   }
+#ifdef CCD_SCOPE_DIAGNOSTIC
+  TIM_OC_InitTypeDef sConfigOC = {0};
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
   sConfigOC.Pulse = 96;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
@@ -962,11 +970,17 @@ static void MX_TIM2_Init(void)
   {
     Error_Handler();
   }
+  GPIO_InitTypeDef trigger_pin = {0};
+  trigger_pin.Pin = GPIO_PIN_5;
+  trigger_pin.Mode = GPIO_MODE_AF_PP;
+  trigger_pin.Pull = GPIO_NOPULL;
+  trigger_pin.Speed = GPIO_SPEED_FREQ_LOW;
+  trigger_pin.Alternate = GPIO_AF1_TIM2;
+  HAL_GPIO_Init(GPIOA, &trigger_pin);
+#endif
   /* USER CODE BEGIN TIM2_Init 2 */
 
   /* USER CODE END TIM2_Init 2 */
-  HAL_TIM_MspPostInit(&htim2);
-
 }
 
 /**
@@ -1163,7 +1177,13 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
-
+#ifndef CCD_SCOPE_DIAGNOSTIC
+  /* Disconnect the PA5 digital driver and input buffer during acquisition. */
+  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+#endif
   /* USER CODE END MX_GPIO_Init_2 */
 }
 

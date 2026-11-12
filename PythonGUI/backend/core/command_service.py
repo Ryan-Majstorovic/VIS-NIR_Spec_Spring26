@@ -10,6 +10,7 @@ from time import perf_counter
 
 from backend.core.integration_control import IntegrationControl
 from backend.core.performance_monitor import PerformanceMonitor
+from backend.core.saturation_capture import SaturationCapture
 from backend.core.session_manager import SessionManager
 from backend.core.state_manager import StateManager
 from backend.device.base_transport import BaseTransport
@@ -45,6 +46,7 @@ class CommandService:
         self._session_manager = session_manager
         self._transport = transport
         self.integration = IntegrationControl(transport, state_manager)
+        self.saturation_capture = SaturationCapture(state_manager, self.integration)
         self._calibration_manager = calibration_manager
         self._spectrum_builder = spectrum_builder
         self._binary_export_dir = binary_export_dir
@@ -162,12 +164,18 @@ class CommandService:
         self._state_manager.set_session_status(self._session_manager.status())
         self._state_manager.append_log("User configuration updated.")
 
-    def apply_calibration_config(self, config: CalibrationConfig, *, saved: bool = False) -> None:
+    def apply_calibration_config(
+        self, config: CalibrationConfig, *, saved: bool = False, persisted_config: CalibrationConfig | None = None,
+    ) -> None:
         """Purpose: apply new calibration settings. Rationale: calibration changes should flow through one controlled update point."""
         normalized_config = ensure_pixel_mode_without_mapping(config)
-        if saved:
+        if saved or persisted_config is not None:
+            recording_config = (
+                ensure_pixel_mode_without_mapping(persisted_config)
+                if persisted_config is not None else normalized_config
+            )
             with self._recording_lock:
-                self._apply_recording_calibration(normalized_config)
+                self._apply_recording_calibration(recording_config)
         self._calibration_manager.update_config(normalized_config)
         self._state_manager.set_calibration_config(normalized_config)
         latest_spectrum = self._state_manager.latest_spectrum()
@@ -205,6 +213,8 @@ class CommandService:
     def start_binary_recording(self, path: Path | None = None) -> CommandResult:
         """Purpose: start full-rate dense HDF5 recording. Rationale: binary capture is the authoritative storage path."""
         with self._recording_lock:
+            if self.saturation_capture.active:
+                return CommandResult(ok=False, message="Finish saturation calibration before recording.")
             if self._binary_recorder is not None and self._binary_recorder.status()["active"]:
                 return CommandResult(ok=False, message="Binary recording is already running.")
 
@@ -449,9 +459,11 @@ class CommandService:
                 if frame_packets > 0:
                     monitor.record_value("backend.frames_per_chunk", frame_packets)
             for packet in packets:
-                self._process_packet(packet)
+                self._process_packet(packet, received_at_s=enqueued_at_s)
 
-    def _process_packet(self, packet: BannerPacket | TextLinePacket | BinaryFramePacket) -> None:
+    def _process_packet(
+        self, packet: BannerPacket | TextLinePacket | BinaryFramePacket, *, received_at_s: float | None = None,
+    ) -> None:
         """Purpose: apply one parsed packet to the app state. Rationale: each packet type affects the app differently but through one path."""
         if isinstance(packet, BannerPacket):
             self._state_manager.add_firmware_message(packet.text)
@@ -505,7 +517,11 @@ class CommandService:
                     )
 
                 self._last_frame_id = packet.frame_counter
-                self._state_manager.update_from_frame(packet, missed_frames=missed_frames)
+                received_at = arrival_time_s if received_at_s is None else received_at_s
+                self._state_manager.update_from_frame(
+                    packet, missed_frames=missed_frames, received_at_s=received_at,
+                )
+                self.saturation_capture.receive_frame(packet, received_at)
                 self._append_binary_record(packet)
                 if monitor is not None:
                     monitor.increment("backend.full_frames_processed")

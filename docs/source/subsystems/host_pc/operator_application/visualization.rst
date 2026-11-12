@@ -83,6 +83,12 @@ Interactive Controls & Display Modes
 
 **Rationale:** The operator can switch between feature contrast and saturation headroom in the same menu as the graph and data-view controls.
 
+.. _uuid-b4119d29-48ed-4885-a611-d47e2c980b53:
+
+**Requirement:** The Host PC Visualization system shall mirror the live spectrum and rolling spectrogram horizontally when the operator enables Reverse Horizontal Axis, with horizontal tick labels following their samples and markers following their detector pixels.
+
+**Rationale:** Reversing the view lets an operator place shorter wavelengths on the left when the detector is mounted in the opposite orientation. Keeping markers attached to their samples preserves measurements as the display changes.
+
 1. **Line Plot Normalization Modes:**
    * **Auto-Peak Mode:** Scales the y-axis dynamically to the peak value of the active frame, maximizing feature contrast.
    * **Absolute Saturation Mode:** Scales the y-axis against the full-scale ADC saturation ceiling, allowing operators to monitor headroom.

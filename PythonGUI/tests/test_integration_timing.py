@@ -119,6 +119,23 @@ class IntegrationControlTests(unittest.TestCase):
         self.control.receive_text("OK INTEG 8001 9")
         self.assertEqual(self.state.snapshot().device.integration_state, "Applied")
 
+    def test_only_confirmed_request_calls_applied_callback(self):
+        confirmed = []
+        self.control.request(12500, on_applied=confirmed.append)
+        self.control.receive_text("OK INTEG 12500 7")
+        self.assertEqual(confirmed, [])
+        frame = SimpleNamespace(integration_us=12500, frame_counter=7, flags=1)
+        self.control.receive_frame(frame)
+        self.control.receive_frame(frame)
+        self.assertEqual(confirmed, [12500])
+
+        self.control.request(25000, on_applied=confirmed.append)
+        self.control.receive_text("ERR INTEG INVALID")
+        self.control.request(1000000)
+        self.control.receive_text("OK INTEG 1000000 8")
+        self.control.receive_frame(SimpleNamespace(integration_us=1000000, frame_counter=8, flags=1))
+        self.assertEqual(confirmed, [12500])
+
     def test_timeout_and_fault_do_not_apply_requested_metadata(self):
         self.control.request(5_000_000)
         self.assertAlmostEqual(self.control.timer.interval, 11.008)

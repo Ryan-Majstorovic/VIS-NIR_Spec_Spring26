@@ -3,11 +3,13 @@ from __future__ import annotations
 from collections import deque
 from datetime import datetime, timezone
 from threading import Lock
+from time import perf_counter
 from uuid import uuid4
 
-from backend.models.config import CalibrationConfig, UserConfig
+from backend.models.config import CalibrationConfig, CursorConfig, UserConfig
 from backend.models.frames import BinaryFramePacket, FramePacket, SpectrumFrame
 from backend.models.status import AppSnapshot, ConnectionState, DeviceStatus, RecordingStatus, SessionStatus
+from backend.processing.signal_overload import SignalOverload
 
 
 def utc_now() -> datetime:
@@ -28,6 +30,7 @@ class StateManager:
         self._lock = Lock()
         self._user_config = user_config
         self._calibration_config = calibration_config
+        self._signal_overload = SignalOverload()
         self._device_status = DeviceStatus(
             sample_count=user_config.device.sample_count,
             effective_start_index=user_config.device.effective_start_index,
@@ -56,6 +59,15 @@ class StateManager:
             self._device_status.effective_start_index = user_config.device.effective_start_index
             self._device_status.effective_sample_count = user_config.device.effective_sample_count
 
+    def set_cursor_config(self, cursor: CursorConfig) -> None:
+        with self._lock:
+            self._user_config.ui.cursor = cursor.model_copy()
+
+    def set_integration_preference(self, us: int, unit: str) -> None:
+        with self._lock:
+            self._user_config.ui.integration_us = us
+            self._user_config.ui.integration_unit = unit
+
     def get_calibration_config(self) -> CalibrationConfig:
         """Purpose: return the current calibration config. Rationale: readers should not directly mutate the shared object."""
         with self._lock:
@@ -77,6 +89,9 @@ class StateManager:
         """Purpose: update connection-related fields. Rationale: transport state changes should land in one consistent place."""
         with self._lock:
             self._device_status.connection_state = state
+            if state != ConnectionState.connected:
+                self._signal_overload = SignalOverload()
+                self._device_status.signal_overload = False
             if port is not None:
                 self._device_status.port = port
             if message is not None:
@@ -104,6 +119,7 @@ class StateManager:
         with self._lock:
             self._device_status.frame_counter = 0
             self._device_status.integration_us = None
+            self._device_status.timing_profile_id = None
             self._device_status.integration_state = "Unknown"
             self._device_status.requested_integration_us = None
             self._device_status.sample_count = self._user_config.device.sample_count
@@ -111,10 +127,14 @@ class StateManager:
             self._device_status.effective_sample_count = self._user_config.device.effective_sample_count
             self._device_status.missed_frames = 0
             self._device_status.last_frame_flags = 0
+            self._signal_overload = SignalOverload()
+            self._device_status.signal_overload = False
             self._device_status.sample_preview = []
             self._last_spectrum = None
 
-    def update_from_frame(self, frame: FramePacket | BinaryFramePacket, *, missed_frames: int = 0) -> None:
+    def update_from_frame(
+        self, frame: FramePacket | BinaryFramePacket, *, missed_frames: int = 0, received_at_s: float | None = None,
+    ) -> None:
         """Purpose: copy new frame metadata into live status. Rationale: the UI should read frame summaries without parsing frames itself."""
         adc_counts = frame.adc_counts
         if len(adc_counts) >= 8:
@@ -125,13 +145,22 @@ class StateManager:
             self._device_status.last_seen = frame.timestamp
             self._device_status.frame_counter = frame.frame_counter
             self._device_status.integration_us = frame.integration_us
+            self._device_status.timing_profile_id = frame.timing_profile_id
             self._device_status.sample_count = frame.sample_count
             self._device_status.effective_start_index = frame.effective_start
             self._device_status.effective_sample_count = frame.effective_count
             self._device_status.last_frame_flags = frame.flags
+            self._device_status.signal_overload = self._signal_overload.observe(
+                frame, self._calibration_config, self._user_config.device.adc_resolution_bits,
+                perf_counter() if received_at_s is None else received_at_s,
+            )
             self._device_status.missed_frames += missed_frames
             self._device_status.sample_preview = [int(value) for value in preview]
             self._device_status.last_message = f"Frame {frame.frame_counter} received."
+
+    def signal_overload_active(self) -> bool:
+        with self._lock:
+            return self._device_status.connection_state == ConnectionState.connected and self._device_status.signal_overload
 
     def set_integration_status(self, state: str, message: str, requested_us: int | None = None) -> None:
         with self._lock:

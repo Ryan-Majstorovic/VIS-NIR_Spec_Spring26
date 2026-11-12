@@ -72,6 +72,8 @@ class SpectrumFrame(BaseModel):
     integration_us: int | None = None
     timing_profile_id: int | None = None
     reference_status: str = "Reference not assessed"
+    reference_shifted: bool = False
+    near_saturation: bool = False
     dark_calibration_applied: bool = False
     sample_indices: list[int] = Field(default_factory=list)
     adc_counts: list[int] = Field(default_factory=list)

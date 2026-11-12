@@ -1,4 +1,5 @@
 """Track device-confirmed integration changes without substituting requested metadata."""
+from collections.abc import Callable
 from threading import RLock, Timer
 
 from backend.device.integration import frame_interval_us, valid_integration
@@ -15,8 +16,9 @@ class IntegrationControl:
         self.latest_frame = None
         self.timer = None
         self.generation = 0
+        self._on_applied: Callable[[int], None] | None = None
 
-    def request(self, us: int) -> CommandResult:
+    def request(self, us: int, *, on_applied: Callable[[int], None] | None = None) -> CommandResult:
         with self.lock:
             if not valid_integration(us):
                 return CommandResult(ok=False, message="Unsupported integration time.")
@@ -26,6 +28,7 @@ class IntegrationControl:
                 return CommandResult(ok=False, message="Device is not connected.")
             current = self.state.snapshot(include_spectrum=False).device.integration_us or 10
             self.pending_us, self.ack = us, None
+            self._on_applied = on_applied
             self.latest_frame = None
             self.state.set_integration_status("Pending", "Waiting for a complete exposure at the new setting.", us)
             # A request can arrive just after the old long exposure began.
@@ -70,7 +73,10 @@ class IntegrationControl:
         if self.ack is not None and self.latest_frame is not None:
             us, frame_id = self.latest_frame
             if us == self.ack[0] and frame_id >= self.ack[1]:
+                on_applied = self._on_applied
                 self._finish("Applied", f"Applied {us} µs; frame {frame_id} confirmed.")
+                if on_applied is not None:
+                    on_applied(us)
 
     def _timeout(self, generation=None) -> None:
         with self.lock:
@@ -87,4 +93,5 @@ class IntegrationControl:
             self.timer.cancel()
         self.timer = None
         self.pending_us, self.ack = None, None
+        self._on_applied = None
         self.state.set_integration_status(status, message)

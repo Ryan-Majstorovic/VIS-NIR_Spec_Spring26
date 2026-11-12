@@ -84,10 +84,13 @@ static void ProductionScopeCapture(uint32_t mode)
   uint32_t *f = header.f;
   f[0] = target; f[1] = HAL_RCC_GetHCLKFreq();
   f[2] = PROD_LOGIC_COUNT; f[3] = CCD_LINE_SAMPLE_COUNT - __HAL_DMA_GET_COUNTER(&hdma_adc1);
-  f[4] = 8U; f[5] = 48U; f[6] = origin; f[7] = stride;
+  f[4] = 8U; f[5] = CCD_ADC_PERIOD_TICKS - CCD_ADC_INITIAL_COUNTER; f[6] = origin; f[7] = stride;
   f[8] = (ccd_integration_us > CCD_BASE_FRAME_US ? ccd_integration_us : CCD_BASE_FRAME_US) * 96U;
   f[9] = ccd_integration_us; f[10] = 1U; f[11] = 7U;
   f[12] = ccd_frame_slots[slot].ready && !ccd_timing_fault ? 1U : 0U;
+  /* CSCP flags bit 1 records the internal trigger configuration at capture. */
+  if ((TIM2->CCER & TIM_CCER_CC1E) == 0U && (GPIOA->MODER & GPIO_MODER_MODER5) == GPIO_MODER_MODER5)
+    f[12] |= 2U;
   f[13] = __HAL_DMA_GET_COUNTER(&hdma_adc1); f[14] = HAL_ADC_GetError(&hadc1) | (ccd_timing_fault ? 0x80000000U : 0U);
   f[15] = TIM1->PSC; f[16] = TIM1->ARR; f[17] = TIM1->CCR1;
   f[18] = TIM2->PSC; f[19] = TIM2->ARR;
@@ -97,7 +100,7 @@ static void ProductionScopeCapture(uint32_t mode)
   f[28] = TIM2->SMCR; f[29] = TIM3->CCER; f[30] = TIM4->CCER;
   f[31] = CCD_TIMING_PROFILE_ID;
   f[32] = CCD_LINE_SAMPLE_COUNT; f[33] = HAL_RCC_GetPCLK2Freq() / 4U;
-  f[34] = 15U; f[35] = 12U; f[36] = CCD_ICG_LOW_US * 96U + 48U;
+  f[34] = 15U; f[35] = 12U; f[36] = CCD_ICG_LOW_US * 96U + f[5];
   f[37] = ADC1->CR1; f[38] = ADC1->CR2; f[39] = ADC1->SMPR2;
   f[40] = TIM4->CR2; f[41] = TIM4->CCR2;
   f[42] = ccd_adc_done_cycles - origin; f[43] = ccd_adc_done_phase;

@@ -1,22 +1,46 @@
 from __future__ import annotations
 
+import multiprocessing
 import threading
+from dataclasses import dataclass, field
+from multiprocessing.connection import Connection
+from multiprocessing.process import BaseProcess
 
 import serial
 from serial.tools import list_ports
 
 from backend.device.base_transport import BaseTransport
+from backend.device.serial_worker import run_serial_worker
 from backend.models.status import ConnectionState
 
 
+@dataclass
+class _SerialSession:
+    process: BaseProcess
+    control: Connection
+    stream: Connection
+    stop: threading.Event = field(default_factory=threading.Event)
+    finished: threading.Event = field(default_factory=threading.Event)
+    receiver: threading.Thread | None = None
+
+    def stop_worker(self) -> None:
+        self.stop.set()
+        self.control.close()
+        if self.process.pid is not None:
+            self.process.join(timeout=0.5)
+            if self.process.is_alive():
+                self.process.terminate()
+                self.process.join()
+        self.process.close()
+
+
 class SerialTransport(BaseTransport):
-    """Purpose: implement USB serial communication. Rationale: pyserial details should stay isolated from the rest of the app."""
+    """Forward device bytes and commands between the app and the COM worker."""
+
     def __init__(self) -> None:
-        """Purpose: initialize serial transport state. Rationale: the reader thread, port handle, and locks need one owner."""
         super().__init__()
-        self._serial: serial.Serial | None = None
-        self._reader_thread: threading.Thread | None = None
-        self._stop_event = threading.Event()
+        self._context = multiprocessing.get_context("spawn")
+        self._session: _SerialSession | None = None
         self._write_lock = threading.Lock()
 
     def connect(
@@ -26,8 +50,7 @@ class SerialTransport(BaseTransport):
         baudrate: int = 115200,
         timeout_s: float = 0.1,
     ) -> None:
-        """Purpose: open the selected COM port and start reading. Rationale: connection startup should also launch the background reader."""
-        if self.is_connected():
+        if self._session is not None:
             self.disconnect()
 
         selected_port = port
@@ -38,75 +61,92 @@ class SerialTransport(BaseTransport):
             selected_port = ports[0]["device"]
 
         self._emit_state(ConnectionState.connecting, f"Opening {selected_port}...")
-        self._serial = serial.Serial(
-            port=selected_port,
-            baudrate=baudrate,
-            timeout=timeout_s,
-        )
-        self._stop_event.clear()
-        self._reader_thread = threading.Thread(
-            target=self._reader_loop,
-            name="serial-reader",
+        control, worker_control = self._context.Pipe()
+        stream, worker_stream = self._context.Pipe(duplex=False)
+        process = self._context.Process(
+            target=run_serial_worker,
+            args=(selected_port, baudrate, timeout_s, worker_control, worker_stream),
+            name="serial-acquisition",
             daemon=True,
         )
-        self._reader_thread.start()
+        session = _SerialSession(process, control, stream)
+        try:
+            with worker_control, worker_stream:
+                process.start()
+            if not control.poll(10):
+                raise serial.SerialTimeoutException(f"Timed out opening {selected_port}.")
+            error = control.recv()
+            if error is not None:
+                raise serial.SerialException(error)
+        except BaseException:
+            stream.close()
+            session.stop_worker()
+            raise
+
+        self._session = session
+        session.receiver = threading.Thread(
+            target=self._receive, args=(session,), name="serial-receiver", daemon=True,
+        )
         self._emit_state(ConnectionState.connected, f"Connected to {selected_port}.")
+        session.receiver.start()
 
     def disconnect(self) -> None:
-        """Purpose: stop the reader thread and close the port. Rationale: shutdown should release the OS handle cleanly."""
-        self._stop_event.set()
-
-        serial_handle = self._serial
-        self._serial = None
-        if serial_handle is not None and serial_handle.is_open:
-            serial_handle.close()
-
-        if self._reader_thread is not None:
-            self._reader_thread.join(timeout=0.5)
-            self._reader_thread = None
-
+        with self._write_lock:
+            session = self._session
+            self._session = None
+            if session is not None:
+                session.stop_worker()
+        if session is not None and session.receiver is not threading.current_thread():
+            if session.receiver is not None:
+                session.receiver.join(timeout=0.5)
         self._emit_state(ConnectionState.disconnected, "Serial connection closed.")
 
     def write(self, payload: bytes) -> None:
-        """Purpose: send bytes over the serial port. Rationale: writes should be synchronized so commands are not interleaved."""
-        if not self.is_connected() or self._serial is None:
-            raise RuntimeError("Serial transport is not connected.")
-
         with self._write_lock:
-            self._serial.write(payload)
-            self._serial.flush()
+            session = self._session
+            if session is None or session.stop.is_set() or session.finished.is_set():
+                raise serial.SerialException("Serial port is not connected.")
+            try:
+                session.control.send_bytes(payload)
+                if not session.control.poll(2):
+                    raise serial.SerialTimeoutException("Serial worker did not confirm the write.")
+                error = session.control.recv()
+            except (EOFError, OSError) as exc:
+                session.stop.set()
+                session.control.close()
+                failure = serial.SerialException(str(exc) or "Serial worker stopped during a write.")
+            else:
+                if error is not None:
+                    raise serial.SerialException(error)
+                return
+        if self._session is session:
+            self._emit_state(ConnectionState.error, str(failure))
+        raise failure
 
     def is_connected(self) -> bool:
-        """Purpose: report whether the serial port is open. Rationale: callers need a quick readiness check before reading or writing."""
-        return self._serial is not None and self._serial.is_open
+        session = self._session
+        return session is not None and not session.stop.is_set() and not session.finished.is_set()
 
     def list_ports(self) -> list[dict[str, str]]:
-        """Purpose: enumerate available COM ports. Rationale: the UI needs human-readable choices for connection selection."""
-        available = []
-        for port in sorted(list_ports.comports(), key=lambda item: item.device):
-            available.append(
-                {
-                    "device": port.device,
-                    "description": port.description or "",
-                    "hwid": port.hwid or "",
-                }
-            )
-        return available
+        return [
+            {"device": port.device, "description": port.description or "", "hwid": port.hwid or ""}
+            for port in sorted(list_ports.comports(), key=lambda port: port.device)
+        ]
 
-    def _reader_loop(self) -> None:
-        """Purpose: continuously read serial bytes in the background. Rationale: incoming data should be collected without blocking the UI."""
+    def _receive(self, session: _SerialSession) -> None:
+        error = "Serial acquisition worker stopped."
         try:
-            while not self._stop_event.is_set():
-                serial_handle = self._serial
-                if serial_handle is None or not serial_handle.is_open:
-                    break
-
-                chunk = serial_handle.read(max(1, serial_handle.in_waiting or 1))
-                if chunk:
-                    self._emit_bytes(chunk)
-        except serial.SerialException as exc:
-            if not self._stop_event.is_set():
-                self._emit_state(ConnectionState.error, str(exc))
+            with session.stream:
+                while not session.stop.is_set():
+                    item = session.stream.recv()
+                    if isinstance(item, str):
+                        error = item
+                        break
+                    if not session.stop.is_set():
+                        self._emit_bytes(item)
+        except (EOFError, OSError):
+            pass
         finally:
-            if not self._stop_event.is_set():
-                self._emit_state(ConnectionState.disconnected, "Serial reader stopped.")
+            session.finished.set()
+            if not session.stop.is_set() and self._session is session:
+                self._emit_state(ConnectionState.error, error)

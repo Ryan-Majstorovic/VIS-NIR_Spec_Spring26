@@ -6,7 +6,7 @@
 #define CCD_MIN_INTEGRATION_US 10U
 #define CCD_DEFAULT_INTEGRATION_US 100U
 #define CCD_ICG_LOW_US 8U
-#define CCD_TIMING_PROFILE_ID 0x00010001UL
+#define CCD_TIMING_PROFILE_ID 0x00010002UL
 #define CCD_BASE_FRAME_US 8000U
 #define CCD_MAX_INTEGRATION_US 5000000U
 #define CCD_READOUT_US 7388U
@@ -22,7 +22,12 @@
 #define CCD_MAX_SEGMENT_US 32000U
 #define CCD_MAX_SEGMENTS ((CCD_MAX_INTEGRATION_US + CCD_MAX_SEGMENT_US - 1U) / CCD_MAX_SEGMENT_US)
 #define CCD_TIMER_PRESCALER 47U /* 96 MHz / (47 + 1) = 2 MHz. */
-#define CCD_ADC_INITIAL_COUNTER 144U /* (192 - 144) / 96 MHz = first trigger after 0.5 us. */
+#define CCD_ADC_PERIOD_TICKS (4U * CCD_MASTER_PERIOD_TICKS)
+/* The previous PA5 trigger rose 26 timer ticks after the inferred detector
+   clock rise in the GPIO captures. The 15-cycle acquisition plus the maximum
+   trigger latency is 69 ticks. Advance by 29 ticks to put the estimated hold
+   18 ticks (187.5 ns) into the same high pulse. Verify at the detector pins. */
+#define CCD_ADC_INITIAL_COUNTER 173U
 #define CCD_MASTER_INITIAL_COUNTER 36U /* MCU clock low -> CCD phiM high, with 125 ns phase margin. */
 #define CCD_SH_HIGH_TICKS 12U /* Detector SH-high is 6 us at 2 MHz; never stretched for phase correction. */
 

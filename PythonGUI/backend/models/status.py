@@ -31,6 +31,7 @@ class DeviceStatus(BaseModel):
     last_error: str | None = None
     frame_counter: int = 0
     integration_us: int | None = None
+    timing_profile_id: int | None = None
     requested_integration_us: int | None = None
     integration_state: str = "Unknown"
     integration_message: str = "Waiting for device timing metadata."
@@ -39,6 +40,7 @@ class DeviceStatus(BaseModel):
     effective_sample_count: int = 3648
     missed_frames: int = 0
     last_frame_flags: int = 0
+    signal_overload: bool = False
     sample_preview: list[int] = Field(default_factory=list)
     firmware_messages: list[str] = Field(default_factory=list)
 

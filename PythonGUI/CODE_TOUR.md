@@ -128,7 +128,7 @@ The `UIConfig` model also has display defaults that may not be written in this d
 - `show_frame_data_edge`
 - `show_frame_data_refresh`
 - `show_frame_data_session`
-- `show_frame_data_cursor`
+- `cursor` stores marker appearance, reference readout options, and peak search sensitivity.
 
 ### `configs/default_calibration.json`
 
