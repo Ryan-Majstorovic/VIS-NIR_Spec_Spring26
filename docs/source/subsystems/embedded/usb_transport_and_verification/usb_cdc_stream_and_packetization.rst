@@ -10,7 +10,7 @@ Subsystem Role & Boundary
 
 UUID: :ref:`CDC0B26E-0ACB-4BFE-98DB-3505D51942BA <uuid-cdc0b26e-0acb-4bfe-98db-3505d51942ba>`
 
-This subsystem forms the embedded endpoint of the Integration-defined wire contract. It wraps the raw ADC samples collected by DMA into binary packets with complete header metadata and transmits them over a Full-Speed USB virtual serial port. It interleaves diagnostic ASCII text responses without corrupting frame boundaries.
+This subsystem forms the embedded endpoint of the shared MCU-to-Host PC wire contract. It wraps the raw ADC samples collected by DMA into binary packets with complete header metadata and transmits them over a Full-Speed USB virtual serial port. It interleaves diagnostic ASCII text responses without corrupting frame boundaries.
 
 Inputs and Outputs
 ------------------

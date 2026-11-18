@@ -58,10 +58,14 @@ Integration & Boundary Responsibilities
 
 UUID: :ref:`704CE22A-40C3-4F92-AC0A-387165454C5A <uuid-704ce22a-40c3-4f92-ac0a-387165454c5a>`
 
-The Embedded system interacts with external entities across strictly delineated boundaries:
+The Embedded system provides complete measurement frames, frame identity,
+status information, and supported control outcomes at the shared host-device
+boundary.
 
 * **Detector Hardware Boundary (Optics / Sensor Hardware):** Directs logic-level clock pulses (fM, SH, ICG) to the TCD1304DG sensor and receives the conditioned analog video signal through the driver board front-end. It enforces hardware constraints such as 2.0 MHz clock stability and 6.0 us SH pulse duration.
-* **Wire Transport Boundary (Integration):** Populates the shared wire contract defined in :doc:`Integration Interfaces <../integration/interfaces/system_boundaries/Integration Interfaces>`, transmitting 7424-byte binary packets and receiving ASCII commands over USB CDC. The Embedded system does not define host-side photometric corrections or UI display rendering.
+* **Wire Transport Boundary:** Transmits measurement frames and receives
+  commands through the shared USB CDC interface described in
+  :doc:`usb_transport_and_verification/usb_cdc_stream_and_packetization`.
 * **Measurement Plane Output:** Produces fully qualified, raw 16-bit ADC sample frames containing all 3648 effective detector pixels for consumption by the Host PC Primary Data Pipeline.
 
 Normative System Requirements

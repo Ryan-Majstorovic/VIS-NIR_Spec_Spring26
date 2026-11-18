@@ -58,10 +58,13 @@ Integration & Boundary Responsibilities
 
 UUID: :ref:`7E7E9CF8-7577-4DC8-97B7-6730476D1D41 <uuid-7e7e9cf8-7577-4dc8-97b7-6730476d1d41>`
 
-The Host PC system interacts with external systems across strictly defined boundaries:
+The Host PC exchanges measurement frames, supported control requests, and
+command outcomes at the MCU-to-Host PC boundary.
 
 * **Hardware & Sensor Geometry Boundary (Optics / Sensor Hardware):** The physical detector geometry (Toshiba TCD1304DG: 3694 total elements, 32 leading shielded/dummy pixels, 3648 effective active pixels, 14 trailing dummy pixels) is defined by hardware and optical specifications. The Host PC does not define physical sensor geometry; it consumes configured or reported geometry parameters (``effective_start_index = 32``, ``effective_sample_count = 3648``) to slice valid detector data from raw frames.
-* **Wire Protocol Boundary (Integration):** The wire framing contract (packet magic ``CCD1``, header fields, payload byte count, byte endianness) is owned by Integration. The Host PC ingests conforming byte streams and validates payload lengths without redefining wire transport rules.
+* **Wire Protocol Boundary:** The Host PC validates incoming frames against
+  the shared :doc:`USB CDC packet format
+  <../embedded/usb_transport_and_verification/usb_cdc_stream_and_packetization>`.
 * **Measurement Plane Output:** The Host PC produces fully qualified, calibrated spectrum records and session export datasets for downstream analysis.
 
 Normative System Requirements

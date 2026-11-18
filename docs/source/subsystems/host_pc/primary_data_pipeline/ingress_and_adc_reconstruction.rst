@@ -10,7 +10,7 @@ Subsystem Role & Boundary
 
 UUID: :ref:`7F8AC58C-1708-486C-AF4F-2D690F3CE607 <uuid-7f8ac58c-1708-486c-af4f-2d690f3ce607>`
 
-Ingress operates strictly as a consumer of the Integration-defined wire contract. It does not define packet encodings, serial framing, or sensor physical geometry. It reads the incoming byte buffer, matches the ``CCD1`` protocol format, and makes complete, validated measurement frames available to subsequent pipeline stages.
+Ingress operates strictly as a consumer of the shared MCU-to-Host PC wire contract. It does not define packet encodings, serial framing, or sensor physical geometry. It reads the incoming byte buffer, matches the ``CCD1`` protocol format, and makes complete, validated measurement frames available to subsequent pipeline stages.
 
 Inputs and Outputs
 ------------------

@@ -13,6 +13,12 @@
   max-width: none;
 }
 
+/* Wrap table cell text instead of forcing horizontal scrolling */
+.wy-table-responsive table td,
+.wy-table-responsive table th {
+  white-space: normal;
+}
+
 /* Reusable embedded PDF frame */
 .pdf-viewer {
   width: 100%;

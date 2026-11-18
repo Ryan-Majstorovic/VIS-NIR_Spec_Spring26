@@ -30,6 +30,9 @@ html_theme_options = {
 }
 suppress_warnings = ["autosectionlabel.*"]
 
+numfig = True
+numfig_format = {"figure": "Figure %s"}
+
 
 def setup(app):
     app.add_css_file("css/my_theme.css")

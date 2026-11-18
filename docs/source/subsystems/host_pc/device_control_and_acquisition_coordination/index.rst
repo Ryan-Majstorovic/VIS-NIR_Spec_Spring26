@@ -26,16 +26,27 @@ UUID: :ref:`A75379EB-011D-4A55-A11F-F9EC8A3C480D <uuid-a75379eb-011d-4a55-a11f-f
 .. list-table::
    :header-rows: 1
 
-   * - Section
-     - Core Responsibilities
-   * - :doc:`connection_management`
-     - Serial port enumeration, connection state machine, threaded I/O, and reconnection gating.
-   * - :doc:`acquisition_session_control`
-     - 125 Hz stream synchronization, frame continuity tracking, sequence gap detection, and rate diagnostics.
-   * - :doc:`integration_time_control`
-     - Fixed 8 ms baseline documentation and planned ICG-synchronized dynamic integration time specification.
-   * - :doc:`command_status_handling`
-     - Mixed ASCII/binary stream demuxing, raw CDC command dispatch, and firmware message logging.
+   * - System
+     - Primary Responsibility
+   * - :doc:`Connection Management <connection_management>`
+     - Device attachment, readiness, connection loss, and action gating.
+   * - :doc:`Acquisition Session Control <acquisition_session_control>`
+     - Acquisition start and stop, complete-frame routing, and session disposition.
+   * - :doc:`Integration-Time Control <integration_time_control>`
+     - Request validation, outcome classification, and pending or active value state.
+   * - :doc:`Command Status Handling <command_status_handling>`
+     - Command-outcome normalization and dependent-action gating.
+
+.. _uuid-960065a1-1e9d-4ddf-afc9-cb37e5c57d47:
+
+Integration Boundary
+--------------------
+
+UUID: :ref:`960065A1-1E9D-4DDF-AFC9-CB37E5C57D47 <uuid-960065a1-1e9d-4ddf-afc9-cb37e5c57d47>`
+
+The Host PC coordinates acquisition-control requests and device outcomes at
+the MCU-to-Host PC boundary. The shared command and status contract is
+documented in :doc:`../../embedded/system_control_and_hardware_interface/command_protocol_and_state_machine`.
 
 .. toctree::
    :maxdepth: 1
