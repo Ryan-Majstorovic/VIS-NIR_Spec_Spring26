@@ -57,8 +57,8 @@ IDs refer to the :doc:`Test Plan <subsystems/test_and_verification/test_plan>`.
      - OPT-6
      - Planned
    * - Export
-     - CSV rows hold raw ADC counts, processed counts, wavelengths, volts,
-       and processed intensity.
+     - :doc:`HDF5 capture and session ZIP requirements
+       <subsystems/host_pc/operator_application/export_initiation_and_session_retention>`.
      - SW-1
      - Planned
    * - Usability

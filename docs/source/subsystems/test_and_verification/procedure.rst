@@ -21,15 +21,18 @@ UUID: :ref:`C65AD49A-2C6B-45D1-8FE8-821B6FC1A21A <uuid-c65ad49a-2c6b-45d1-8fe8-8
    (OPT-1, OPT-2). Fit and load the wavelength map (OPT-3), then measure the
    line widths (OPT-4).
 3. **Phase 2: LED source comparison.** Measure the secondary LED on the
-   reference and on the calibrated prototype and export both spectra to CSV
-   (CMP-1 to CMP-3).
+   reference and on the calibrated prototype. Export the reference CSV and
+   prototype session ZIP (CMP-1 to CMP-3). Reconstruct the prototype
+   wavelength axis from the exported calibration revision associated with
+   each frame, as checked in SW-1 and SW-4.
 4. **Phase 3: broadband evaluation.** Measure the white LED on both
    instruments, export both spectra, and overlay the normalized curves
    (CMP-4).
 5. **Tracking.** Capture the 405 nm source alone for second order (OPT-5) and
    repeat the calibration captures after reconnecting the fiber and
    power-cycling the electronics (OPT-6).
-6. **Demonstration.** Run SW-2 and SW-3 with the stored calibration.
+6. **Demonstration.** Run SW-2 and SW-3 with the stored calibration. Run
+   SW-4 to check calibration and timing traceability across a recording.
 
 .. _uuid-1c9d38dd-1449-4243-8591-4cd8717a9a29:
 
@@ -69,7 +72,8 @@ UUID: :ref:`B65EBB2F-81C9-4CAA-AE21-A9DED740EAF6 <uuid-b65ebb2f-81c9-4caa-ae21-a
 **Requirement:** The Test and Verification system shall store, with every
 test result, the test ID, date, operator, sources switched on, reference
 wavelengths from CAL-3, prototype integration time, calibration-map version,
-bench configuration, and the paths to the raw CSV files from both instruments.
+bench configuration, and the paths to the reference CSV and prototype
+session ZIP for tests that use both instruments.
 
 **Rationale:** A result can only be rechecked or compared with a later run if
 the light, settings, calibration, and raw data that produced it are known.

@@ -26,6 +26,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdlib.h>
+#include "ccd_timing.h"
 
 /* USER CODE END Includes */
 
@@ -37,9 +39,9 @@
 #define CCD_EFFECTIVE_SAMPLE_COUNT 3648U
 #define CCD_FRAME_BUFFER_COUNT 4U
 #define CCD_FRAME_TX_TIMEOUT_MS 20U
-#define CCD_USB_HEADER_BYTES 24U
+#define CCD_USB_HEADER_BYTES 32U
 #define CCD_USB_PAYLOAD_BYTES (CCD_LINE_SAMPLE_COUNT * sizeof(uint16_t))
-#define CCD_USB_FRAME_BYTES (CCD_USB_HEADER_BYTES + CCD_USB_PAYLOAD_BYTES)
+#define CCD_USB_FRAME_BYTES (CCD_USB_HEADER_BYTES + CCD_USB_PAYLOAD_BYTES + 4U)
 
 typedef struct __attribute__((packed))
 {
@@ -53,12 +55,15 @@ typedef struct __attribute__((packed))
   uint16_t effective_count;
   uint16_t flags;
   uint32_t payload_bytes;
+  uint32_t integration_us;
+  uint32_t timing_profile_id;
 } CcdUsbFrameHeader;
 
 typedef struct
 {
   CcdUsbFrameHeader header;
   uint16_t samples[CCD_LINE_SAMPLE_COUNT];
+  uint32_t crc32;
 } CcdUsbFramePacket;
 
 typedef struct
@@ -78,7 +83,7 @@ typedef char CcdUsbFramePacketSizeCheck[(sizeof(CcdUsbFramePacket) == CCD_USB_FR
 enum
 {
   CCD_PACKET_MAGIC = 0x31444343UL,
-  CCD_PACKET_VERSION = 1U,
+  CCD_PACKET_VERSION = 3U,
   CCD_PACKET_TYPE_FRAME = 1U
 };
 
@@ -99,6 +104,8 @@ enum
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
 DMA_HandleTypeDef hdma_adc1;
+DMA_HandleTypeDef hdma_tim3_up;
+DMA_HandleTypeDef hdma_tim4_up;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
@@ -120,6 +127,27 @@ volatile uint32_t ccd_icg_end_count = 0;
 volatile uint32_t ccd_dropped_frame_count = 0;
 volatile uint32_t ccd_usb_timeout_count = 0;
 
+static uint32_t ccd_integration_us = CCD_DEFAULT_INTEGRATION_US;
+static volatile uint32_t ccd_adc_done_cycles, ccd_adc_done_phase, ccd_adc_status;
+static uint32_t ccd_scope_command;
+static volatile uint8_t ccd_scope_hold;
+static volatile uint32_t ccd_requested_us;
+static volatile uint32_t ccd_applied_frame_id;
+static volatile uint8_t ccd_reconfigure_ready;
+static volatile uint8_t ccd_arm_due;
+static volatile uint8_t ccd_discard_exposure;
+static volatile uint8_t ccd_timing_fault;
+static volatile uint8_t ccd_running;
+static uint8_t ccd_fault_reported;
+static uint32_t ccd_segment_count = 1U;
+static uint32_t ccd_segment_index;
+static CcdTimingSegment ccd_sh_schedule[CCD_MAX_SEGMENTS];
+static CcdTimingSegment ccd_icg_schedule[CCD_MAX_SEGMENTS];
+#define CCD_RX_BYTES 128U
+static uint8_t ccd_rx[CCD_RX_BYTES];
+static volatile uint16_t ccd_rx_head, ccd_rx_tail;
+static volatile uint8_t ccd_rx_overflow;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -137,7 +165,15 @@ static void SendStatusLine(const char *text);
 static uint8_t CDC_Transmit_Blocking(const uint8_t *buffer, uint16_t length, uint32_t timeout_ms);
 static uint8_t CDC_WaitForTxReady(uint32_t timeout_ms);
 static void PrepareFrameHeader(uint32_t slot_index, uint32_t frame_id, uint16_t flags);
-static void StartFrameCaptureFromIcgEdge(void);
+static void ArmFrameCapture(void);
+static void StartTiming(uint32_t integration_us);
+static void StopTiming(void);
+static void PollTimingCommands(void);
+static void HandleFrameBoundary(void);
+static void PollCaptureArm(void);
+#ifndef CCD_SCOPE_DIAGNOSTIC
+static void ProductionScopeCapture(uint32_t mode);
+#endif
 static void AbortActiveCapture(uint16_t fault_flags);
 static int32_t AcquireFrameSlot(void);
 static int32_t FindNextReadyFrameSlot(void);
@@ -148,6 +184,253 @@ static void ReleaseFrameSlot(uint32_t slot_index);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* All timer-register changes below occur with the waveform engine stopped. */
+static void StopTiming(void)
+{
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  /* Finish an emitted SH pulse before stopping a normal reconfiguration.
+     Fault shutdown takes priority over waveform completion. */
+  if (ccd_running != 0U && ccd_timing_fault == 0U && (TIM3->CR1 & TIM_CR1_CEN)) {
+    while (TIM3->CCR1 != 0U &&
+           (TIM3->CNT < TIM3->CCR1 || TIM3->CNT + 2U >= TIM3->ARR)) { }
+  }
+  ccd_running = 0U;
+  TIM3->CR1 &= ~TIM_CR1_CEN;
+  TIM4->CR1 &= ~TIM_CR1_CEN;
+  TIM1->CR1 &= ~TIM_CR1_CEN;
+  TIM1->BDTR &= ~TIM_BDTR_MOE;
+  TIM3->DIER = 0U;
+  TIM4->DIER = 0U;
+  TIM3->CR1 &= ~TIM_CR1_CEN;
+  TIM4->CR1 &= ~TIM_CR1_CEN;
+  TIM3->CCER &= ~TIM_CCER_CC1E;
+  TIM4->CCER &= ~TIM_CCER_CC1E;
+  TIM2->CR1 &= ~TIM_CR1_CEN;
+  __set_PRIMASK(primask);
+  (void)HAL_ADC_Stop_DMA(&hadc1);
+  if (hdma_tim3_up.Instance != NULL) (void)HAL_DMA_Abort(&hdma_tim3_up);
+  if (hdma_tim4_up.Instance != NULL) (void)HAL_DMA_Abort(&hdma_tim4_up);
+  ccd_active_slot = -1;
+}
+
+static void TimingDmaError(DMA_HandleTypeDef *dma)
+{
+  (void)dma;
+  ccd_timing_fault = 1U;
+}
+
+static void StartScheduleDma(TIM_HandleTypeDef *timer, DMA_HandleTypeDef *dma,
+                             DMA_Stream_TypeDef *stream, uint32_t channel,
+                             CcdTimingSegment *schedule)
+{
+  dma->Instance = stream;
+  dma->Init.Channel = channel;
+  dma->Init.Direction = DMA_MEMORY_TO_PERIPH;
+  dma->Init.PeriphInc = DMA_PINC_DISABLE;
+  dma->Init.MemInc = DMA_MINC_ENABLE;
+  dma->Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
+  dma->Init.MemDataAlignment = DMA_MDATAALIGN_WORD;
+  dma->Init.Mode = DMA_CIRCULAR;
+  dma->Init.Priority = DMA_PRIORITY_HIGH;
+  dma->Init.FIFOMode = DMA_FIFOMODE_DISABLE;
+  if (HAL_DMA_Init(dma) != HAL_OK) { ccd_timing_fault = 1U; return; }
+  dma->XferErrorCallback = TimingDmaError;
+  /* ARR, reserved RCR (zero), CCR1 are one contiguous hardware DMA burst. */
+  timer->Instance->DCR = TIM_DMABASE_ARR | TIM_DMABURSTLENGTH_3TRANSFERS;
+  if (HAL_DMA_Start_IT(dma, (uint32_t)schedule,
+                       (uint32_t)&timer->Instance->DMAR, ccd_segment_count * 3U) != HAL_OK) {
+    ccd_timing_fault = 1U;
+    return;
+  }
+  /* Wrap completion is not a physical frame interrupt; retain error interrupts only. */
+  __HAL_DMA_DISABLE_IT(dma, DMA_IT_HT | DMA_IT_TC);
+  timer->Instance->DIER |= TIM_DIER_UDE;
+}
+
+static void StartTiming(uint32_t integration_us)
+{
+  TIM_SlaveConfigTypeDef slave = {0};
+  StopTiming();
+  for (uint32_t i = 0U; i < CCD_FRAME_BUFFER_COUNT; ++i) ccd_frame_slots[i].ready = 0U;
+  ccd_integration_us = integration_us;
+  ccd_discard_exposure = 1U;
+  ccd_reconfigure_ready = 0U;
+  ccd_arm_due = 0U;
+  ccd_segment_index = 0U;
+  ccd_segment_count = integration_us <= CCD_BASE_FRAME_US ? 1U : CcdSegmentCount(integration_us);
+  TIM3->SMCR = 0U;
+  TIM4->SMCR = 0U;
+  TIM3->CR1 = TIM_CR1_ARPE;
+  TIM4->CR1 = TIM_CR1_ARPE;
+  TIM3->PSC = CCD_TIMER_PRESCALER;
+  TIM4->PSC = CCD_TIMER_PRESCALER;
+  TIM3->CCMR1 = TIM_OCMODE_PWM1 | TIM_CCMR1_OC1PE;
+  TIM4->CCMR1 = TIM_OCMODE_PWM2 | TIM_CCMR1_OC1PE;
+  TIM3->CCER = CCD_SH_INVERT_OUTPUT ? TIM_CCER_CC1P : 0U;
+  TIM4->CCER = CCD_ICG_INVERT_OUTPUT ? TIM_CCER_CC1P : 0U;
+  TIM4->CR2 = TIM_TRGO_OC1REF;
+
+  CcdTimingSegment first_sh, first_icg;
+  if (integration_us <= CCD_BASE_FRAME_US) {
+    first_sh = (CcdTimingSegment){integration_us * 2U - 1U, 0U, CCD_SH_HIGH_TICKS};
+    first_icg = (CcdTimingSegment){CCD_BASE_FRAME_US * 2U - 1U, 0U,
+                                 CCD_ICG_LOW_US * 2U};
+  } else {
+    first_sh = CcdSegment(integration_us, 0U, 1U);
+    first_icg = CcdSegment(integration_us, 0U, 0U);
+  }
+  /* TIM4 starts segment 0 immediately. Its first update latches segment 1. */
+  TIM4->ARR = first_icg.arr;
+  TIM4->CCR1 = first_icg.ccr;
+  TIM4->EGR = TIM_EGR_UG;
+  TIM4->CNT = 0U;
+  if (ccd_segment_count > 1U) {
+    CcdTimingSegment next = CcdSegment(integration_us, 1U, 0U);
+    TIM4->ARR = next.arr;
+    TIM4->CCR1 = next.ccr;
+  }
+
+  /* TIM3's initial wrap occurs one 0.5-us tick after common startup.
+     That wrap latches segment 0 and emits SH; it must not skip its first segment. */
+  CcdTimingSegment initial_sh = ccd_segment_count > 1U ?
+      CcdSegment(integration_us, ccd_segment_count - 1U, 1U) : first_sh;
+  TIM3->ARR = initial_sh.arr;
+  TIM3->CCR1 = initial_sh.ccr;
+  TIM3->EGR = TIM_EGR_UG;
+  TIM3->CNT = initial_sh.arr;
+  TIM3->ARR = first_sh.arr;
+  TIM3->CCR1 = first_sh.ccr;
+
+  if (ccd_segment_count > 1U) {
+    for (uint32_t i = 0U; i < ccd_segment_count; ++i) {
+      ccd_sh_schedule[i] = CcdSegment(integration_us, (i + 1U) % ccd_segment_count, 1U);
+      ccd_icg_schedule[i] = CcdSegment(integration_us, (i + 2U) % ccd_segment_count, 0U);
+    }
+    StartScheduleDma(&htim3, &hdma_tim3_up, DMA1_Stream2, DMA_CHANNEL_5, ccd_sh_schedule);
+    StartScheduleDma(&htim4, &hdma_tim4_up, DMA1_Stream6, DMA_CHANNEL_2, ccd_icg_schedule);
+  }
+
+  slave.SlaveMode = TIM_SLAVEMODE_TRIGGER;
+  slave.InputTrigger = TIM_TS_ITR0; /* Both independent outputs start from TIM1. */
+  if (HAL_TIM_SlaveConfigSynchro(&htim3, &slave) != HAL_OK ||
+      HAL_TIM_SlaveConfigSynchro(&htim4, &slave) != HAL_OK) ccd_timing_fault = 1U;
+  slave.InputTrigger = TIM_TS_ITR3; /* TIM4 OC1REF rising is CCD ICG rising after U1 inversion. */
+  if (HAL_TIM_SlaveConfigSynchro(&htim2, &slave) != HAL_OK) ccd_timing_fault = 1U;
+#ifdef CCD_SCOPE_DIAGNOSTIC
+  TIM2->CCER |= TIM_CCER_CC1E;
+#else
+  TIM2->CCER &= ~TIM_CCER_CC1E; /* Production ADC uses the internal update TRGO. */
+#endif
+  TIM3->SR = 0U;
+  TIM4->SR = 0U;
+  HAL_NVIC_ClearPendingIRQ(TIM4_IRQn);
+  TIM4->DIER |= TIM_DIER_UIE | TIM_DIER_CC1IE;
+  TIM3->CCER |= TIM_CCER_CC1E;
+  TIM4->CCER |= TIM_CCER_CC1E;
+  ArmFrameCapture();
+  if (ccd_timing_fault != 0U) { StopTiming(); return; }
+
+  /* PA8 stays non-inverted at the timer; U1 inverts it at the CCD.
+     CNT=36 is the center of MCU-low / detector-high. Both APB timer clocks
+     are 96 MHz here. Driver propagation and trigger latency need scope checks. */
+  TIM1->CR2 = TIM_TRGO_ENABLE;
+  TIM1->EGR = TIM_EGR_UG;
+  TIM1->CNT = CCD_MASTER_INITIAL_COUNTER;
+  TIM1->SR = 0U;
+  TIM1->CCER = (TIM1->CCER & ~TIM_CCER_CC1P) | TIM_CCER_CC1E |
+      (CCD_MASTER_INVERT_OUTPUT ? TIM_CCER_CC1P : 0U);
+  TIM1->BDTR |= TIM_BDTR_MOE;
+  ccd_running = 1U;
+  TIM1->CR1 |= TIM_CR1_CEN; /* Single TRGO_ENABLE edge releases both slaves. */
+}
+
+void CCD_ReceiveCommandBytes(const uint8_t *bytes, uint32_t length)
+{
+  /* USB ISR is the sole producer; parsing and every USB write run in main. */
+  for (uint32_t i = 0U; i < length; ++i) {
+    uint16_t next = (uint16_t)((ccd_rx_head + 1U) % CCD_RX_BYTES);
+    if (next == ccd_rx_tail) { ccd_rx_overflow = 1U; break; }
+    ccd_rx[ccd_rx_head] = bytes[i];
+    __DMB();
+    ccd_rx_head = next;
+  }
+}
+
+static void PollTimingCommands(void)
+{
+  static char line[48];
+  static uint32_t used;
+  static uint8_t discard;
+  char response[96];
+  if (ccd_rx_overflow != 0U) {
+    __disable_irq();
+    ccd_rx_tail = ccd_rx_head;
+    ccd_rx_overflow = 0U;
+    __enable_irq();
+    used = 0U;
+    discard = 1U;
+    SendStatusLine("ERR INTEG OVERFLOW\r\n");
+  }
+  while (ccd_rx_tail != ccd_rx_head) {
+    char c = (char)ccd_rx[ccd_rx_tail];
+    ccd_rx_tail = (uint16_t)((ccd_rx_tail + 1U) % CCD_RX_BYTES);
+    if (c == '\r') continue;
+    if (c != '\n') {
+      if (used + 1U < sizeof(line)) line[used++] = c;
+      else discard = 1U;
+      continue;
+    }
+    line[used] = '\0';
+    if (discard != 0U) {
+      SendStatusLine("ERR INTEG INVALID\r\n");
+    } else if (strncmp(line, "INTEG ", 6U) == 0) {
+      char *end;
+      uint32_t us = (uint32_t)strtoul(line + 6U, &end, 10);
+      uint8_t digits = used > 6U;
+      for (uint32_t i = 6U; i < used; ++i)
+        if (line[i] < '0' || line[i] > '9') digits = 0U;
+      if (digits == 0U || *end != '\0' || !CcdIntegrationValid(us)) {
+        SendStatusLine("ERR INTEG INVALID\r\n");
+      } else if (ccd_timing_fault != 0U) {
+        SendStatusLine("ERR INTEG TIMING\r\n");
+      } else if (ccd_requested_us != 0U) {
+        SendStatusLine("ERR INTEG BUSY\r\n");
+      } else {
+        ccd_requested_us = us;
+        ccd_applied_frame_id = 0U;
+        snprintf(response, sizeof(response), "PENDING INTEG %lu\r\n", (unsigned long)us);
+        SendStatusLine(response);
+      }
+    } else if (strcmp(line, "SCOPE PRODUCTION") == 0) {
+      ccd_scope_command = 10U;
+    } else if (strcmp(line, "SCOPE PRODUCTIONOVERVIEW") == 0) {
+      ccd_scope_command = 11U;
+    } else {
+      SendStatusLine("ERR COMMAND UNKNOWN\r\n");
+    }
+    used = 0U;
+    discard = 0U;
+  }
+  if (ccd_reconfigure_ready != 0U) StartTiming(ccd_requested_us);
+  if (ccd_timing_fault != 0U) {
+    if (ccd_fault_reported == 0U) {
+      ccd_fault_reported = 1U;
+      StopTiming();
+      /* Do not leak previously queued frames after a timing fault. */
+      for (uint32_t i = 0U; i < CCD_FRAME_BUFFER_COUNT; ++i) ccd_frame_slots[i].ready = 0U;
+      SendStatusLine("ERR INTEG TIMING\r\n");
+      ccd_requested_us = 0U;
+    }
+  } else if (ccd_applied_frame_id != 0U) {
+    snprintf(response, sizeof(response), "OK INTEG %lu %lu\r\n",
+             (unsigned long)ccd_integration_us, (unsigned long)ccd_applied_frame_id);
+    ccd_applied_frame_id = 0U;
+    ccd_requested_us = 0U;
+    SendStatusLine(response);
+  }
+}
+
 static uint8_t CDC_Transmit_Blocking(const uint8_t *buffer, uint16_t length, uint32_t timeout_ms)
 {
   uint32_t start_tick = HAL_GetTick();
@@ -167,7 +450,14 @@ static uint8_t CDC_Transmit_Blocking(const uint8_t *buffer, uint16_t length, uin
 
 static void SendStatusLine(const char *text)
 {
-  (void)CDC_Transmit_Blocking((const uint8_t *)text, (uint16_t)strlen(text), 100U);
+  static uint8_t status_buffer[96];
+  if (CDC_WaitForTxReady(100U) == USBD_OK) {
+    uint32_t length = strlen(text);
+    if (length > sizeof(status_buffer)) length = sizeof(status_buffer);
+    memcpy(status_buffer, text, length);
+    (void)CDC_Transmit_Blocking(status_buffer, (uint16_t)length, 100U);
+    (void)CDC_WaitForTxReady(100U); /* Static storage remains valid after timeout. */
+  }
 }
 
 static uint8_t CDC_WaitForTxReady(uint32_t timeout_ms)
@@ -199,6 +489,8 @@ static void PrepareFrameHeader(uint32_t slot_index, uint32_t frame_id, uint16_t 
   header->effective_count = CCD_EFFECTIVE_SAMPLE_COUNT;
   header->flags = flags;
   header->payload_bytes = (uint32_t)CCD_USB_PAYLOAD_BYTES;
+  header->integration_us = ccd_integration_us;
+  header->timing_profile_id = CCD_TIMING_PROFILE_ID;
 }
 
 static int32_t AcquireFrameSlot(void)
@@ -230,19 +522,13 @@ static int32_t AcquireFrameSlot(void)
 
 static int32_t FindNextReadyFrameSlot(void)
 {
-  uint32_t offset;
-
-  for (offset = 0U; offset < CCD_FRAME_BUFFER_COUNT; ++offset)
-  {
-    uint32_t slot_index = (ccd_next_tx_slot + offset) % CCD_FRAME_BUFFER_COUNT;
-    if (ccd_frame_slots[slot_index].ready != 0U)
-    {
-      ccd_next_tx_slot = (uint8_t)((slot_index + 1U) % CCD_FRAME_BUFFER_COUNT);
-      return (int32_t)slot_index;
-    }
+  int32_t oldest = -1;
+  for (uint32_t i = 0U; i < CCD_FRAME_BUFFER_COUNT; ++i) {
+    if (!ccd_frame_slots[i].ready || (int8_t)i == ccd_sending_slot) continue;
+    if (oldest < 0 || (int32_t)(ccd_frame_slots[i].packet.header.frame_id -
+        ccd_frame_slots[(uint32_t)oldest].packet.header.frame_id) < 0) oldest = (int32_t)i;
   }
-
-  return -1;
+  return oldest;
 }
 
 static void ReleaseFrameSlot(uint32_t slot_index)
@@ -270,10 +556,10 @@ static void AbortActiveCapture(uint16_t fault_flags)
   ccd_active_slot = -1;
 }
 
-static void StartFrameCaptureFromIcgEdge(void)
+static void ArmFrameCapture(void)
 {
   int32_t slot_index;
-  uint32_t frame_id = ++ccd_icg_cycle_counter;
+  uint32_t frame_id = ccd_icg_cycle_counter + 1U;
 
   if (ccd_active_slot >= 0)
   {
@@ -282,11 +568,8 @@ static void StartFrameCaptureFromIcgEdge(void)
   }
 
   slot_index = AcquireFrameSlot();
-  if (slot_index < 0)
-  {
-    ccd_dropped_frame_count++;
-    return;
-  }
+  if (slot_index < 0) { ccd_arm_due = 1U; return; }
+  ccd_arm_due = 0U;
 
   ccd_frame_slots[(uint32_t)slot_index].ready = 0U;
   ccd_frame_slots[(uint32_t)slot_index].flags = CCD_FRAME_FLAG_ICG_SYNC;
@@ -295,9 +578,11 @@ static void StartFrameCaptureFromIcgEdge(void)
 
   (void)HAL_ADC_Stop_DMA(&hadc1);
   __HAL_TIM_DISABLE(&htim2);
-  __HAL_TIM_SET_COUNTER(&htim2, 0U);
+  __HAL_TIM_SET_COUNTER(&htim2, CCD_ADC_INITIAL_COUNTER);
   __HAL_TIM_CLEAR_FLAG(&htim2, TIM_FLAG_UPDATE);
 
+  ADC1->CR2 = (ADC1->CR2 & ~ADC_CR2_EXTEN) | ADC_EXTERNALTRIGCONVEDGE_RISING;
+  ccd_adc_status = 0U;
   if (HAL_ADC_Start_DMA(
           &hadc1,
           (uint32_t *)ccd_frame_slots[(uint32_t)slot_index].packet.samples,
@@ -305,10 +590,27 @@ static void StartFrameCaptureFromIcgEdge(void)
   {
     ccd_dropped_frame_count++;
     AbortActiveCapture(CCD_FRAME_FLAG_TIMING_FAULT);
+    ccd_timing_fault = 1U;
     return;
   }
 
-  __HAL_TIM_ENABLE(&htim2);
+  /* TIM4 OC1REF rising starts the armed timer in hardware, not this ISR. */
+}
+
+static uint32_t CcdCrcUpdate(uint32_t crc, const void *data, uint32_t length)
+{
+  static const uint32_t table[16] = {
+    0x00000000U,0x1db71064U,0x3b6e20c8U,0x26d930acU,
+    0x76dc4190U,0x6b6b51f4U,0x4db26158U,0x5005713cU,
+    0xedb88320U,0xf00f9344U,0xd6d6a3e8U,0xcb61b38cU,
+    0x9b64c2b0U,0x86d3d2d4U,0xa00ae278U,0xbdbdf21cU};
+  const uint8_t *p = data;
+  while (length--) {
+    crc ^= *p++;
+    crc = (crc >> 4) ^ table[crc & 15U];
+    crc = (crc >> 4) ^ table[crc & 15U];
+  }
+  return crc;
 }
 
 static uint8_t SendFrameSlot(uint32_t slot_index)
@@ -316,6 +618,8 @@ static uint8_t SendFrameSlot(uint32_t slot_index)
   uint8_t status;
 
   ccd_frame_slots[slot_index].packet.header.flags = ccd_frame_slots[slot_index].flags;
+  ccd_frame_slots[slot_index].packet.crc32 = CcdCrcUpdate(0xffffffffU,
+      &ccd_frame_slots[slot_index].packet, CCD_USB_FRAME_BYTES - 4U) ^ 0xffffffffU;
   status = CDC_Transmit_Blocking(
       (const uint8_t *)&ccd_frame_slots[slot_index].packet,
       (uint16_t)CCD_USB_FRAME_BYTES,
@@ -368,38 +672,14 @@ int main(void)
   MX_TIM4_Init();
   MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
-  if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  if (HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  if (HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  __HAL_TIM_DISABLE(&htim2);
-  __HAL_TIM_SET_COUNTER(&htim2, 0U);
-
   HAL_Delay(200);
-  SendStatusLine("USB CDC online\r\n");
-  SendStatusLine("ICG-synchronous binary frame stream enabled\r\n");
-  SendStatusLine("TIM4 update=ICG rising edge start, TIM4 compare=ICG falling edge stop\r\n");
-
-  if (HAL_TIM_Base_Start_IT(&htim4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  if (HAL_TIM_PWM_Start_IT(&htim4, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0U; DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+  char timing_status[72];
+  snprintf(timing_status, sizeof(timing_status), "USB CDC corrected timing firmware v3 profile %08lX\r\n",
+           (unsigned long)CCD_TIMING_PROFILE_ID);
+  SendStatusLine(timing_status);
+  StartTiming(CCD_DEFAULT_INTEGRATION_US);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -409,6 +689,23 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    PollTimingCommands();
+    PollCaptureArm();
+#ifndef CCD_SCOPE_DIAGNOSTIC
+    if (ccd_scope_command != 0U && ccd_requested_us == 0U && ccd_running && ccd_sending_slot < 0) {
+      uint32_t mode = ccd_scope_command; ccd_scope_command = 0U;
+      ProductionScopeCapture(mode);
+    }
+#endif
+    if (ccd_sending_slot >= 0) {
+      /* A timeout is not USB completion. Protect the in-flight payload until
+         the endpoint releases it, even while later acquisitions are skipped. */
+      if (CDC_TxReady_FS() == 0U) continue;
+      __disable_irq();
+      ReleaseFrameSlot((uint32_t)ccd_sending_slot);
+      ccd_sending_slot = -1;
+      __enable_irq();
+    }
     int32_t ready_slot = FindNextReadyFrameSlot();
     if (ready_slot >= 0)
     {
@@ -423,8 +720,10 @@ int main(void)
       }
 
       __disable_irq();
-      ReleaseFrameSlot((uint32_t)ready_slot);
-      ccd_sending_slot = -1;
+      if (CDC_TxReady_FS() != 0U) {
+        ReleaseFrameSlot((uint32_t)ready_slot);
+        ccd_sending_slot = -1;
+      }
       __enable_irq();
     }
   }
@@ -433,9 +732,16 @@ int main(void)
 
 static void MX_DMA_Init(void)
 {
+  __HAL_RCC_DMA1_CLK_ENABLE();
   __HAL_RCC_DMA2_CLK_ENABLE();
+  HAL_NVIC_SetPriority(DMA1_Stream2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream2_IRQn);
+  HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
 
-  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 1, 0);
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(ADC_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(ADC_IRQn);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 }
 
@@ -559,7 +865,7 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 0;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 47;
+  htim1.Init.Period = CCD_MASTER_PERIOD_TICKS - 1U;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
@@ -576,15 +882,15 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_ENABLE;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 24;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.Pulse = CCD_MASTER_HIGH_TICKS;
+  sConfigOC.OCPolarity = CCD_MASTER_INVERT_OUTPUT ? TIM_OCPOLARITY_LOW : TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
@@ -625,7 +931,6 @@ static void MX_TIM2_Init(void)
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_OC_InitTypeDef sConfigOC = {0};
 
   /* USER CODE BEGIN TIM2_Init 1 */
 
@@ -633,7 +938,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 191;
+  htim2.Init.Period = CCD_ADC_PERIOD_TICKS - 1U;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -655,6 +960,8 @@ static void MX_TIM2_Init(void)
   {
     Error_Handler();
   }
+#ifdef CCD_SCOPE_DIAGNOSTIC
+  TIM_OC_InitTypeDef sConfigOC = {0};
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
   sConfigOC.Pulse = 96;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
@@ -663,11 +970,17 @@ static void MX_TIM2_Init(void)
   {
     Error_Handler();
   }
+  GPIO_InitTypeDef trigger_pin = {0};
+  trigger_pin.Pin = GPIO_PIN_5;
+  trigger_pin.Mode = GPIO_MODE_AF_PP;
+  trigger_pin.Pull = GPIO_NOPULL;
+  trigger_pin.Speed = GPIO_SPEED_FREQ_LOW;
+  trigger_pin.Alternate = GPIO_AF1_TIM2;
+  HAL_GPIO_Init(GPIOA, &trigger_pin);
+#endif
   /* USER CODE BEGIN TIM2_Init 2 */
 
   /* USER CODE END TIM2_Init 2 */
-  HAL_TIM_MspPostInit(&htim2);
-
 }
 
 /**
@@ -690,11 +1003,11 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 0;
+  htim3.Init.Prescaler = 47;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim3.Init.Period = 959;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
   {
     Error_Handler();
@@ -716,7 +1029,7 @@ static void MX_TIM3_Init(void)
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
   sConfigOC.Pulse = 576;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCPolarity = CCD_SH_INVERT_OUTPUT ? TIM_OCPOLARITY_LOW : TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
@@ -750,11 +1063,11 @@ static void MX_TIM4_Init(void)
 
   /* USER CODE END TIM4_Init 1 */
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 95;
+  htim4.Init.Prescaler = 47;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim4.Init.Period = 7999;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
   {
     Error_Handler();
@@ -768,15 +1081,15 @@ static void MX_TIM4_Init(void)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_OC1REF;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.OCMode = TIM_OCMODE_PWM2;
   sConfigOC.Pulse = 7388;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
+  sConfigOC.OCPolarity = CCD_ICG_INVERT_OUTPUT ? TIM_OCPOLARITY_LOW : TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
@@ -864,7 +1177,13 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
-
+#ifndef CCD_SCOPE_DIAGNOSTIC
+  /* Disconnect the PA5 digital driver and input buffer during acquisition. */
+  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+#endif
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
@@ -877,44 +1196,112 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc)
   }
 }
 
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+/* Gate at IRQ entry, before HAL dispatch can allow a conversion past DMA. */
+void CCD_AdcDmaIrqBegin(void)
 {
-  if (hadc->Instance == ADC1)
-  {
-    int8_t active_slot = ccd_active_slot;
-
-    __HAL_TIM_DISABLE(&htim2);
-
-    if (active_slot >= 0)
-    {
-      ccd_frame_slots[(uint32_t)active_slot].packet.header.flags =
-          ccd_frame_slots[(uint32_t)active_slot].flags;
-      ccd_frame_slots[(uint32_t)active_slot].ready = 1U;
-    }
-
-    ccd_dma_full_count++;
-    ccd_frame_counter++;
-    ccd_active_slot = -1;
+  if (DMA2->LISR & DMA_LISR_TCIF0) {
+    TIM2->CR1 &= ~TIM_CR1_CEN;
+    ADC1->CR2 &= ~(ADC_CR2_EXTEN | ADC_CR2_ADON);
+    ccd_adc_done_cycles = DWT->CYCCNT;
+    ccd_adc_done_phase = TIM4->CNT;
+    ccd_adc_status = ADC1->SR;
+    if (ccd_adc_status & ADC_SR_OVR) ccd_timing_fault = 1U;
   }
 }
 
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+  if (hadc->Instance != ADC1) return;
+  __HAL_TIM_DISABLE(&htim2);
+  int8_t slot = ccd_active_slot;
+  if (HAL_ADC_GetError(hadc) != HAL_ADC_ERROR_NONE ||
+      HAL_DMA_GetError(&hdma_adc1) != HAL_DMA_ERROR_NONE ||
+      ((ADC1->SR | ccd_adc_status) & ADC_SR_OVR)) ccd_timing_fault = 1U;
+  if (slot >= 0) {
+    if (ccd_discard_exposure != 0U || ccd_timing_fault != 0U) {
+      ccd_discard_exposure = 0U;
+    } else {
+      ccd_frame_slots[(uint32_t)slot].ready = 1U;
+      if (ccd_requested_us == ccd_integration_us && ccd_requested_us != 0U)
+        ccd_applied_frame_id = ccd_frame_slots[(uint32_t)slot].packet.header.frame_id;
+    }
+  }
+  ccd_dma_full_count++;
+  ccd_frame_counter++;
+  ccd_active_slot = -1;
+  /* Rearm after HAL IRQ dispatch returns, in the readout idle interval. */
+  ccd_arm_due = 1U;
+}
+
+void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
+{
+  if (hadc->Instance == ADC1) {
+    TIM2->CR1 &= ~TIM_CR1_CEN;
+    ADC1->CR2 &= ~(ADC_CR2_EXTEN | ADC_CR2_ADON);
+    ccd_timing_fault = 1U;
+  }
+}
+
+void HAL_TIM_ErrorCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM3 || htim->Instance == TIM4) ccd_timing_fault = 1U;
+}
+
+static void PollCaptureArm(void)
+{
+  if (!ccd_running || ccd_timing_fault || ccd_reconfigure_ready || !ccd_arm_due || ccd_scope_hold) return;
+  if (ccd_requested_us != 0U && ccd_requested_us != ccd_integration_us) {
+    ccd_reconfigure_ready = 1U;
+    return;
+  }
+  uint32_t mask = __get_PRIMASK();
+  __disable_irq();
+  /* A deferred USB write may consume the idle interval. Skip that frame;
+     do not rearm close to a trigger or label a partial capture as complete. */
+  if (ccd_active_slot < 0 &&
+      !(TIM4->SR & TIM_SR_UIF) &&
+      !(ccd_segment_index == 0U && TIM4->CNT < 100U) &&
+      !(ccd_segment_index + 1U == ccd_segment_count && TIM4->CNT + 200U >= TIM4->ARR))
+    ArmFrameCapture();
+  __set_PRIMASK(mask);
+}
+
+void CCD_AdcDmaIrqEnd(void) { PollCaptureArm(); }
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-  if (htim->Instance == TIM4)
-  {
-    ccd_icg_start_count++;
-    StartFrameCaptureFromIcgEdge();
-  }
+  if (htim->Instance != TIM4 || ccd_running == 0U) return;
+  ccd_segment_index = (ccd_segment_index + 1U) % ccd_segment_count;
+  if (ccd_segment_index != 0U) return;
+  ccd_icg_end_count++;
+  HandleFrameBoundary();
+}
+
+static void HandleFrameBoundary(void)
+{
+  /* Already armed in the preceding idle interval. No HAL work at the edge. */
+  if (ccd_active_slot >= 0 &&
+      ccd_frame_slots[(uint32_t)ccd_active_slot].packet.header.frame_id != ccd_icg_cycle_counter + 1U)
+    ccd_timing_fault = 1U;
 }
 
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
-  if (htim->Instance == TIM4)
-  {
-    ccd_icg_end_count++;
-    __HAL_TIM_DISABLE(&htim2);
+  /* CCR=0 in continuation segments also generates CC1; only segment zero
+     has a physical ICG rising edge at 8 us. */
+  if (htim->Instance == TIM4 && ccd_segment_index == 0U && TIM4->CNT >= CCD_ICG_LOW_US * 2U) {
+    ccd_icg_start_count++;
+    ccd_icg_cycle_counter++;
+    if (ccd_active_slot < 0) {
+      TIM2->CR1 &= ~TIM_CR1_CEN;
+      ccd_dropped_frame_count++;
+    }
   }
 }
+
+#ifndef CCD_SCOPE_DIAGNOSTIC
+#include "production_scope.inc"
+#endif
 
 /* USER CODE END 4 */
 

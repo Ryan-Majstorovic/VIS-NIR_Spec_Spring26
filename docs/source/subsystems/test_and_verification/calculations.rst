@@ -2,7 +2,9 @@ Calculations
 ============
 
 Each number reported by the :doc:`Test Plan <test_plan>` is computed as
-defined on this page, from exported CSV data.
+defined on this page. For spectral comparisons, use the reference CSV and
+the prototype session ZIP as described in the
+:doc:`Comparison Procedure <procedure>`.
 
 .. _uuid-c9755e34-9135-4415-b7c0-c39e287a70d8:
 

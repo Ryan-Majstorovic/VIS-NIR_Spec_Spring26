@@ -35,6 +35,8 @@ class FramePacket(BaseModel):
     effective_start: int
     effective_count: int
     flags: int
+    integration_us: int | None = None
+    timing_profile_id: int | None = None
     adc_counts: list[int]
     timestamp: datetime = Field(default_factory=utc_now)
 
@@ -49,6 +51,8 @@ class BinaryFramePacket:
     flags: int
     adc_counts: np.ndarray
     timestamp_ns: int
+    integration_us: int | None = None
+    timing_profile_id: int | None = None
     kind: Literal["frame"] = "frame"
     timestamp: datetime = field(default_factory=utc_now)
 
@@ -65,6 +69,12 @@ class SpectrumFrame(BaseModel):
     effective_start_index: int = 32
     effective_sample_count: int = 3648
     frame_flags: int = 0
+    integration_us: int | None = None
+    timing_profile_id: int | None = None
+    reference_status: str = "Reference not assessed"
+    reference_shifted: bool = False
+    near_saturation: bool = False
+    dark_calibration_applied: bool = False
     sample_indices: list[int] = Field(default_factory=list)
     adc_counts: list[int] = Field(default_factory=list)
     live_display_counts: list[float] = Field(default_factory=list)

@@ -30,22 +30,27 @@ class DeviceStatus(BaseModel):
     last_message: str | None = None
     last_error: str | None = None
     frame_counter: int = 0
+    integration_us: int | None = None
+    timing_profile_id: int | None = None
+    requested_integration_us: int | None = None
+    integration_state: str = "Unknown"
+    integration_message: str = "Waiting for device timing metadata."
     sample_count: int = 0
     effective_start_index: int = 32
     effective_sample_count: int = 3648
     missed_frames: int = 0
     last_frame_flags: int = 0
+    signal_overload: bool = False
     sample_preview: list[int] = Field(default_factory=list)
     firmware_messages: list[str] = Field(default_factory=list)
 
 
 class SessionStatus(BaseModel):
-    """Purpose: summarize buffered session data. Rationale: exporting and capture status belong in one lightweight object."""
+    """Summarize the live session buffers."""
     session_id: str
     started_at: datetime = Field(default_factory=utc_now)
     frames_buffered: int = 0
     dropped_frames: int = 0
-    last_export_path: str | None = None
 
 
 class RecordingStatus(BaseModel):
@@ -56,7 +61,9 @@ class RecordingStatus(BaseModel):
     queue_depth: int = 0
     path: str | None = None
     last_path: str | None = None
-    last_csv_path: str | None = None
+    last_zip_path: str | None = None
+    exporting: bool = False
+    export_percent: int | None = None
     error: str | None = None
 
 

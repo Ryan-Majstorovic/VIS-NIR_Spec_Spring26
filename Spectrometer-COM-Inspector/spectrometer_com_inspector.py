@@ -4,6 +4,7 @@ import argparse
 import struct
 import sys
 import time
+import zlib
 from dataclasses import dataclass
 
 try:
@@ -50,6 +51,8 @@ class StreamStats:
     last_effective_start: int | None = None
     last_effective_count: int | None = None
     last_flags: int | None = None
+    last_integration_us: int | None = None
+    last_timing_profile_id: int | None = None
 
 
 class Ccd1FrameCounter:
@@ -107,7 +110,7 @@ class Ccd1FrameCounter:
 
         if (
             magic != PACKET_MAGIC
-            or version != PACKET_VERSION
+            or version not in (1, 2, 3)
             or packet_type != PACKET_TYPE_FRAME
             or sample_count == 0
             or sample_count > MAX_BINARY_SAMPLE_COUNT
@@ -117,10 +120,17 @@ class Ccd1FrameCounter:
             self.stats.bad_sync_bytes += 1
             return True
 
-        total_frame_bytes = FRAME_HEADER.size + payload_bytes
+        header_size = {1: 24, 2: 28, 3: 32}[version]
+        total_frame_bytes = header_size + payload_bytes + (4 if version == 3 else 0)
         if len(self._buffer) < total_frame_bytes:
             return False
 
+        if version == 3 and zlib.crc32(self._buffer[:total_frame_bytes-4]) != struct.unpack_from("<I", self._buffer, total_frame_bytes-4)[0]:
+            del self._buffer[:1]
+            self.stats.bad_sync_bytes += 1
+            return True
+        self.stats.last_integration_us = struct.unpack_from("<I", self._buffer, 24)[0] if version >= 2 else None
+        self.stats.last_timing_profile_id = struct.unpack_from("<I", self._buffer, 28)[0] if version == 3 else None
         del self._buffer[:total_frame_bytes]
         self._record_frame(
             frame_id=frame_id,
@@ -217,6 +227,7 @@ def print_report(counter: Ccd1FrameCounter, previous: StreamStats, previous_time
         f"last_id={format_optional_int(current.last_frame_id)} | "
         f"missed={current.missed_frames} | "
         f"flags={format_optional_hex(current.last_flags)} | "
+        f"integration_us={current.last_integration_us} | "
         f"samples={format_optional_int(current.last_sample_count)} | "
         f"bad_sync={current.bad_sync_bytes} | "
         f"{bytes_per_second / 1_000_000:5.2f} MB/s"

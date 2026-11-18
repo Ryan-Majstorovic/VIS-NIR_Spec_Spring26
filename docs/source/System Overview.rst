@@ -15,7 +15,7 @@ system has three subsystems and one verification activity:
   analog output with ADC1 into a DMA frame buffer, and streams ``CCD1``
   frames over USB CDC.
 * **Host PC:** the Python application rebuilds frames, applies calibration,
-  displays live spectra, and exports CSV sessions.
+  displays live spectra, and exports session ZIPs.
 * **Test and Verification:** compares the calibrated prototype with a
   commercial reference spectrometer using the laser calibration unit and LED
   sources.
@@ -39,4 +39,6 @@ End-to-End Measurement Chain
 7. The Host PC validates the packet and applies bias and dark correction,
    the pixel-to-wavelength map, and any configured intensity corrections.
 8. The application displays a line spectrum or rolling spectrogram.
-9. CSV export writes raw and derived columns for analysis.
+9. Session export packages HDF5 measurements as CSV alongside wavelength
+   mapping, calibration revisions, and timing ranges in a JSON file within
+   the same ZIP.

@@ -2,18 +2,12 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import datetime, timezone
-from pathlib import Path
 from threading import Lock
-from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from backend.core.performance_monitor import PerformanceMonitor
 from backend.models.frames import SpectrogramHistoryFrame, SpectrumFrame
 from backend.models.status import SessionStatus
-from backend.storage.export_csv import export_spectra_csv
-
-if TYPE_CHECKING:
-    from backend.processing.spectrum_builder import SpectrumBuilder
 
 
 DEFAULT_MAX_SPECTROGRAM_HISTORY_FRAMES = 3072
@@ -25,33 +19,27 @@ def utc_now() -> datetime:
 
 
 class SessionManager:
-    """Purpose: manage the rolling frame buffer and exports. Rationale: capture history should be separate from live state."""
+    """Keep recent full frames for bias capture and compact rows for the spectrogram."""
     def __init__(
         self,
-        export_dir: Path,
         *,
         max_frames: int = 2000,
         max_spectrogram_frames: int = DEFAULT_MAX_SPECTROGRAM_HISTORY_FRAMES,
-        spectrum_builder: "SpectrumBuilder | None" = None,
         performance_monitor: PerformanceMonitor | None = None,
     ) -> None:
-        """Purpose: initialize the session buffer and metadata. Rationale: exporting needs a stable owner for captured frames."""
         self._lock = Lock()
-        self._export_dir = export_dir
         self._max_frames = max_frames
         self._frames: deque[SpectrumFrame] = deque(maxlen=max_frames)
         self._max_spectrogram_frames = max_spectrogram_frames
         self._spectrogram_frames: deque[SpectrogramHistoryFrame] = deque(maxlen=max_spectrogram_frames)
-        self._spectrum_builder = spectrum_builder
         self._performance_monitor = performance_monitor
         self._session_id = self._new_session_id()
         self._started_at = utc_now()
         self._dropped_frames = 0
-        self._last_export_path: str | None = None
 
     @staticmethod
     def _new_session_id() -> str:
-        """Purpose: create a short unique session label. Rationale: saved sessions should be easy to identify."""
+        """Create a short identifier for the current live session."""
         return uuid4().hex[:8]
 
     def set_max_frames(self, max_frames: int) -> None:
@@ -64,7 +52,7 @@ class SessionManager:
             self._frames = deque(current_frames, maxlen=max_frames)
 
     def set_max_spectrogram_frames(self, max_frames: int) -> None:
-        """Purpose: resize the compact spectrogram-history buffer. Rationale: long rolling time windows need more retained rows than the full export buffer can hold."""
+        """Resize the compact spectrogram history for longer rolling time windows."""
         with self._lock:
             current_frames = list(self._spectrogram_frames)[-max_frames:]
             self._max_spectrogram_frames = max_frames
@@ -90,33 +78,6 @@ class SessionManager:
                     )
                 )
 
-    def set_spectrum_builder(self, spectrum_builder: "SpectrumBuilder") -> None:
-        """Purpose: store the export-time processing helper. Rationale: CSV export may need derived columns built on demand."""
-        with self._lock:
-            self._spectrum_builder = spectrum_builder
-
-    def reset(self) -> None:
-        """Purpose: clear the buffered session. Rationale: the user may want a fresh capture without restarting the app."""
-        with self._lock:
-            self._frames.clear()
-            self._spectrogram_frames.clear()
-            self._session_id = self._new_session_id()
-            self._started_at = utc_now()
-            self._dropped_frames = 0
-            self._last_export_path = None
-
-    def export_csv(self) -> Path:
-        """Purpose: write the buffered session to CSV. Rationale: captured data should be easy to inspect outside the app."""
-        with self._lock:
-            timestamp = utc_now().strftime("%Y%m%d_%H%M%S")
-            path = self._export_dir / f"spectrometer_session_{timestamp}.csv"
-            frames = list(self._frames)
-            spectrum_builder = self._spectrum_builder
-        export_spectra_csv(path, frames, spectrum_builder=spectrum_builder)
-        with self._lock:
-            self._last_export_path = str(path)
-            return path
-
     def frames(self) -> list[SpectrumFrame]:
         """Purpose: return buffered frames. Rationale: callers should get a copy rather than direct access to the deque."""
         with self._lock:
@@ -135,5 +96,4 @@ class SessionManager:
                 started_at=self._started_at,
                 frames_buffered=len(self._frames),
                 dropped_frames=self._dropped_frames,
-                last_export_path=self._last_export_path,
             )

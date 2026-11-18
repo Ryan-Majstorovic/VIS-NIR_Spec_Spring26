@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 from backend.models.config import CalibrationConfig
 
@@ -22,8 +23,16 @@ class CalibrationStore:
     def save(self, config: CalibrationConfig) -> Path:
         """Purpose: save calibration settings to disk. Rationale: calibration edits should survive restarts and standalone builds."""
         self._active_path.parent.mkdir(parents=True, exist_ok=True)
-        self._active_path.write_text(
-            json.dumps(config.model_dump(mode="json"), indent=2),
-            encoding="utf-8",
-        )
+        contents = json.dumps(config.model_dump(mode="json"), indent=2)
+        pending = None
+        try:
+            with NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=self._active_path.parent, delete=False,
+            ) as stream:
+                pending = Path(stream.name)
+                stream.write(contents)
+            pending.replace(self._active_path)
+        finally:
+            if pending is not None:
+                pending.unlink(missing_ok=True)
         return self._active_path

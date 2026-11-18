@@ -61,13 +61,15 @@ def resolve_runtime_paths(app_root: Path) -> RuntimePaths:
 
 def configure_logging(log_file: Path) -> logging.Logger:
     """Purpose: configure file and console logging. Rationale: debugging needs one shared logging setup for the whole app."""
+    handlers: list[logging.Handler] = [logging.FileHandler(log_file, encoding="utf-8")]
+    # pythonw has no real console. Kivy redirects stderr into logging; letting
+    # StreamHandler fall back to that stream recursively logs its own output.
+    if sys.__stdout__ is not None:
+        handlers.append(logging.StreamHandler(stream=sys.__stdout__))
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        handlers=[
-            logging.FileHandler(log_file, encoding="utf-8"),
-            logging.StreamHandler(stream=sys.stdout),
-        ],
+        handlers=handlers,
         force=True,
     )
     return logging.getLogger("vis_nir_spec")
@@ -100,10 +102,8 @@ def build_runtime(paths: RuntimePaths, logger: logging.Logger | None = None) -> 
         performance_monitor=performance_monitor,
     )
     session_manager = SessionManager(
-        export_dir=paths.project_root / "exports",
         max_frames=user_config.ui.max_session_frames,
         max_spectrogram_frames=DEFAULT_MAX_SPECTROGRAM_HISTORY_FRAMES,
-        spectrum_builder=spectrum_builder,
         performance_monitor=performance_monitor,
     )
     transport = SerialTransport()

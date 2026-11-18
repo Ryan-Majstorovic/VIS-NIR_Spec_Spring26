@@ -6,7 +6,7 @@ from typing import Sequence
 import numpy as np
 
 from backend.core.performance_monitor import PerformanceMonitor
-from backend.models.config import DeviceConfig
+from backend.models.config import DeviceConfig, SATURATION_WARNING_MARGIN, SaturationPlotReference, SaturationReference
 from backend.models.frames import BinaryFramePacket, FramePacket, SpectrumFrame
 from backend.processing.calibration_manager import CalibrationManager
 from backend.processing.adc_converter import counts_to_volts
@@ -20,6 +20,7 @@ FRAME_DARK_END_INDEX = 28
 LIVE_DISPLAY_CLIP_MIN = 0.0
 NORMALIZED_SIGNAL_MAX = 1.0
 MIN_NORMALIZATION_DENOMINATOR = 1e-9
+SATURATION_FLOOR_PERCENTILE = 5.0
 SPECTROGRAM_ROW_TARGET_WIDTH = 256
 SPECTROGRAM_ROW_PEAK_BLEND = 0.15
 
@@ -51,6 +52,9 @@ class SpectrumBuilder:
             if monitor is not None
             else nullcontext()
         ):
+            plot_reference, warning_reference = self._saturation_references(
+                frame.timing_profile_id, frame.sample_count, frame.effective_start, frame.effective_count, frame.adc_counts,
+            )
             (
                 processed_counts,
                 display_counts,
@@ -58,7 +62,10 @@ class SpectrumBuilder:
                 _volts,
                 dark_reference,
                 saturation_reference_counts,
-            ) = self._build_processed_columns(frame.adc_counts)
+            ) = self._build_processed_columns(
+                frame.adc_counts, integration_us=frame.integration_us, timing_profile_id=frame.timing_profile_id,
+                saturation_reference=plot_reference,
+            )
             raw_adc_counts = (
                 frame.adc_counts.tolist()
                 if hasattr(frame.adc_counts, "tolist")
@@ -74,6 +81,7 @@ class SpectrumBuilder:
                 effective_start_index=frame.effective_start,
                 effective_sample_count=frame.effective_count,
             )
+            reference_status, reference_shifted = self._assess_reference(frame.adc_counts, frame.timing_profile_id)
             return SpectrumFrame(
                 frame_id=frame.frame_counter,
                 timestamp=frame.timestamp,
@@ -82,13 +90,20 @@ class SpectrumBuilder:
                 effective_start_index=frame.effective_start,
                 effective_sample_count=frame.effective_count,
                 frame_flags=frame.flags,
+                integration_us=frame.integration_us,
+                timing_profile_id=frame.timing_profile_id,
+                reference_status=reference_status,
+                reference_shifted=reference_shifted,
+                near_saturation=self._near_saturation(frame.adc_counts, warning_reference),
+                dark_calibration_applied=self._dark_matches(frame.integration_us, frame.timing_profile_id),
                 adc_counts=[int(value) for value in raw_adc_counts],
                 live_display_counts=display_counts.tolist(),
                 spectrogram_row=spectrogram_row,
                 dark_reference_count=dark_reference,
                 notes=(
                     "Captured from TIM4-synchronized USB CDC binary frames. Frame start is "
-                    "the CCD ICG low-to-high edge and frame end is the CCD ICG high-to-low edge."
+                    "referenced to ICG rising; the 32/3648/14 pixel map remains nominal. "
+                    "Sensor-pin phase and exact dummy origin require external verification."
                 ),
             )
 
@@ -100,6 +115,10 @@ class SpectrumBuilder:
             if monitor is not None
             else nullcontext()
         ):
+            plot_reference, warning_reference = self._saturation_references(
+                frame.timing_profile_id, frame.expected_sample_count, frame.effective_start_index,
+                frame.effective_sample_count, frame.adc_counts,
+            )
             (
                 processed_counts,
                 display_counts,
@@ -107,7 +126,10 @@ class SpectrumBuilder:
                 _volts,
                 dark_reference,
                 saturation_reference_counts,
-            ) = self._build_processed_columns(frame.adc_counts)
+            ) = self._build_processed_columns(
+                frame.adc_counts, integration_us=frame.integration_us, timing_profile_id=frame.timing_profile_id,
+                saturation_reference=plot_reference,
+            )
             spectrogram_values = self._normalize_spectrogram_signal(
                 processed_counts,
                 saturation_reference_counts=saturation_reference_counts,
@@ -120,24 +142,13 @@ class SpectrumBuilder:
                 effective_start_index=frame.effective_start_index,
                 effective_sample_count=frame.effective_sample_count,
             )
+            updated.reference_status, updated.reference_shifted = self._assess_reference(
+                frame.adc_counts, frame.timing_profile_id,
+            )
+            updated.near_saturation = self._near_saturation(frame.adc_counts, warning_reference)
             updated.dark_reference_count = dark_reference
+            updated.dark_calibration_applied = self._dark_matches(frame.integration_us, frame.timing_profile_id)
             return updated
-
-    def build_export_columns(
-        self,
-        *,
-        adc_counts: Sequence[int],
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
-        """Purpose: compute export-time wavelength and intensity columns. Rationale: heavy derived data should be delayed until it is actually needed."""
-        (
-            corrected_counts,
-            normalized_counts,
-            wavelengths,
-            volts,
-            frame_dark_level,
-            _saturation_reference_counts,
-        ) = self._build_processed_columns(adc_counts)
-        return corrected_counts, wavelengths, volts, normalized_counts, frame_dark_level
 
     def _build_processed_counts(
         self,
@@ -162,9 +173,70 @@ class SpectrumBuilder:
         _processed_counts, normalized_counts, frame_dark_level = self._build_processed_counts(adc_counts)
         return normalized_counts, frame_dark_level
 
+    def reference_status(self, adc_counts, timing_profile_id) -> str:
+        return self._assess_reference(adc_counts, timing_profile_id)[0]
+
+    def _assess_reference(
+        self, adc_counts: Sequence[int] | np.ndarray, timing_profile_id: int | None,
+    ) -> tuple[str, bool]:
+        raw = np.asarray(adc_counts, dtype=float)
+        if raw.size < 32:
+            return "Reference unavailable: incomplete leading region", False
+        reference = float(np.median(raw[16:29]))
+        active = float(np.median(raw[32:3680])) if raw.size > 32 else reference
+        message = f"Raw reference {reference:.1f} ADC; reference-active {reference-active:.1f} ADC"
+        config = self._calibration_manager.config
+        if config.bias_counts and config.bias_timing_profile_id != timing_profile_id:
+            return message + " | Stored bias bypassed: timing profile mismatch", False
+        if config.dark_offset_counts and config.dark_timing_profile_id != timing_profile_id:
+            message += " | Stored dark bypassed: timing profile mismatch"
+        if len(config.bias_counts) < 29:
+            return message + " | Reference unverified: capture a covered baseline", False
+        baseline = float(np.median(config.bias_counts[16:29]))
+        # Screening threshold, not a calibrated sensor saturation specification.
+        shifted = abs(reference - baseline) > max(50.0, abs(baseline) * 0.05)
+        if shifted:
+            message += " | Reference shifted >5%/50 ADC: check illumination and analog levels"
+        return message, shifted
+
+    def _saturation_references(
+        self, profile: int | None, count: int, start: int, active: int, adc_counts: Sequence[int],
+    ) -> tuple[SaturationReference | None, SaturationReference | None]:
+        if count != len(adc_counts):
+            return None, None
+        config = self._calibration_manager.config
+        geometry = (profile, count, start, active, self._device_config.adc_resolution_bits)
+        warning = config.saturation_reference
+        if warning is not None and not warning.matches(*geometry):
+            warning = None
+        plot = config.saturation_plot_reference
+        if plot is not None and plot.matches(*geometry):
+            return plot, warning
+        return warning, warning
+
+    def _near_saturation(self, adc_counts: Sequence[int], reference: SaturationReference | None) -> bool:
+        if reference is None or not self._calibration_manager.config.show_potential_saturation_warning:
+            return False
+
+        start = reference.effective_start_index
+        active = slice(start, start + reference.effective_sample_count)
+        limit = np.asarray(reference.raw_counts[active])
+        dark = np.asarray(reference.dark_baseline[active])
+        threshold = limit + (dark - limit) * SATURATION_WARNING_MARGIN
+        near = np.asarray(adc_counts[active]) <= threshold
+        return bool(np.any(near[:-2] & near[1:-1] & near[2:]))
+
+    def _dark_matches(self, integration_us: int | None, timing_profile_id: int | None = None) -> bool:
+        config = self._calibration_manager.config
+        return bool(config.apply_dark_subtraction and config.dark_offset_counts and
+                    integration_us is not None and config.dark_integration_us == integration_us and
+                    config.dark_timing_profile_id == timing_profile_id)
+
     def _build_processed_columns(
         self,
         adc_counts: Sequence[int],
+        *, integration_us: int | None = None, timing_profile_id: int | None = None,
+        saturation_reference: SaturationReference | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, np.ndarray]:
         """Purpose: run the calibration pipeline through corrected counts, wavelength assignment, and final normalization. Rationale: both the live plot and CSV export should use the same ordered processing steps."""
         monitor = self._performance_monitor
@@ -177,13 +249,13 @@ class SpectrumBuilder:
             full_scale_count = float((1 << self._device_config.adc_resolution_bits) - 1)
             calibration_config = self._calibration_manager.config
             bias_corrected_raw = raw_counts.copy()
-            if calibration_config.bias_counts:
+            if calibration_config.bias_counts and calibration_config.bias_timing_profile_id == timing_profile_id:
                 bias_corrected_raw = apply_dark_subtraction(
                     bias_corrected_raw,
                     calibration_config.bias_counts,
                 )
             saturated_bias_corrected_raw = np.zeros_like(raw_counts, dtype=float)
-            if calibration_config.bias_counts:
+            if calibration_config.bias_counts and calibration_config.bias_timing_profile_id == timing_profile_id:
                 saturated_bias_corrected_raw = apply_dark_subtraction(
                     saturated_bias_corrected_raw,
                     calibration_config.bias_counts,
@@ -206,14 +278,14 @@ class SpectrumBuilder:
                 frame_dark_level=frame_dark_level,
                 full_scale_count=full_scale_count,
                 apply_dark_subtraction_enabled=calibration_config.apply_dark_subtraction,
-                dark_offset_counts=calibration_config.dark_offset_counts,
+                dark_offset_counts=calibration_config.dark_offset_counts if self._dark_matches(integration_us, timing_profile_id) else [],
             )
             saturation_light_counts = self._light_counts_from_bias_corrected_raw(
                 saturated_bias_corrected_raw,
                 frame_dark_level=frame_dark_level,
                 full_scale_count=full_scale_count,
                 apply_dark_subtraction_enabled=calibration_config.apply_dark_subtraction,
-                dark_offset_counts=calibration_config.dark_offset_counts,
+                dark_offset_counts=calibration_config.dark_offset_counts if self._dark_matches(integration_us, timing_profile_id) else [],
             )
 
             wavelengths = self._wavelengths_for_sample_count(len(raw_counts))
@@ -233,6 +305,27 @@ class SpectrumBuilder:
                 corrected_counts,
                 saturation_reference_counts=saturation_reference_counts,
             )
+            if (
+                saturation_reference is not None
+                and calibration_config.use_calibrated_saturation_scale
+                and calibration_config.display_normalization_mode == "absolute_saturation"
+            ):
+                start = saturation_reference.effective_start_index
+                active = slice(start, start + saturation_reference.effective_sample_count)
+                # The inverted ADC signal increases in brightness as the raw code falls.
+                if isinstance(saturation_reference, SaturationPlotReference):
+                    saturation_floor = saturation_reference.plateau_adc
+                else:
+                    saturation_floor = np.percentile(
+                        saturation_reference.raw_counts[active], SATURATION_FLOOR_PERCENTILE,
+                    )
+                dark_level = np.median(saturation_reference.dark_baseline[active])
+                span = dark_level - saturation_floor
+                if span > MIN_NORMALIZATION_DENOMINATOR:
+                    normalized_counts[active] = np.clip(
+                        (dark_level - raw_counts[active]) / span,
+                        LIVE_DISPLAY_CLIP_MIN, NORMALIZED_SIGNAL_MAX,
+                    )
             return corrected_counts, normalized_counts, wavelengths, volts, frame_dark_level, saturation_reference_counts
 
     def _build_spectrogram_row(
@@ -356,13 +449,13 @@ class SpectrumBuilder:
     def _wavelengths_for_sample_count(self, sample_count: int) -> np.ndarray:
         """Purpose: reuse wavelength arrays for a given sample count and coefficient set. Rationale: live export calculations should not keep rebuilding the same polynomial map."""
         calibration_config = self._calibration_manager.config
-        coefficient_key = tuple(calibration_config.wavelength_coefficients)
+        coefficient_key = tuple(calibration_config.effective_wavelength_coefficients)
         cache_key = (sample_count, coefficient_key)
         wavelengths = self._cached_wavelengths.get(cache_key)
         if wavelengths is None:
             wavelengths = indices_to_wavelengths(
                 range(sample_count),
-                calibration_config.wavelength_coefficients,
+                coefficient_key,
             )
             self._cached_wavelengths = {cache_key: wavelengths}
         return wavelengths

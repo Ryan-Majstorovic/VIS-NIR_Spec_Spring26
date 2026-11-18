@@ -13,7 +13,7 @@ This folder contains the desktop-side pipeline:
 - applying the live calibration pipeline for display values
 - maintaining rolling session and spectrogram-history buffers
 - recording full-rate dense HDF5 binary captures
-- exporting captured frames to CSV
+- exporting completed recordings as ZIP files with frame data and calibration history
 - drawing either a live line spectrum or a rolling spectrogram
 - providing calibration, display/layout, diagnostics, and performance tools
 
@@ -77,10 +77,10 @@ Here is the big picture of the folder:
 - `backend/core/`: application services, runtime wiring, state, sessions, commands, and performance metrics
 - `backend/device/`: serial transport and packet parsing
 - `backend/processing/`: ADC conversion, calibration, wavelength, and spectrogram helpers
-- `backend/storage/`: config loading/saving and CSV export
+- `backend/storage/`: config files, HDF5 capture, and session ZIP export
 - `configs/`: default settings files
 - `logs/`: runtime logs written while the app is running
-- `exports/`: CSV exports created at runtime
+- `exports/`: HDF5 recordings and session ZIP files created at runtime
 
 For the detailed file-by-file walkthrough, read:
 
@@ -115,7 +115,7 @@ Once the user presses `Connect`, data moves through the program like this:
 9. `CommandService._process_packet(...)` updates frame counters, missed-frame counters, logs, and state.
 10. `SpectrumBuilder.build_from_frame(...)` builds a `SpectrumFrame` with raw samples, processed live display values, and a compressed spectrogram row.
 11. `StateManager` stores the latest status and newest spectrum frame.
-12. `SessionManager` appends the full frame to the export buffer and the compact row to the spectrogram-history buffer.
+12. `SessionManager` keeps the full frame for bias capture and the compact row for the spectrogram.
 13. The Kivy UI polls the latest state on timers and redraws the selected graph mode.
 
 ## What Runs Separately
@@ -125,8 +125,8 @@ Several parts run independently so the graph stays responsive while data keeps a
 - The main Kivy UI thread owns the window, buttons, labels, graph widgets, and refresh timers.
 - The serial reader thread inside `SerialTransport` only reads USB CDC bytes and emits callbacks.
 - The packet processor thread inside `CommandService` parses chunks and updates backend state.
-- The session manager keeps bounded rolling buffers for full-frame export data and compact spectrogram rows.
-- CSV export runs only when the user asks to save the buffered session.
+- The session manager keeps bounded rolling buffers for bias capture and the spectrogram.
+- The HDF5 writer saves full-rate measurements, and a separate worker exports the completed capture.
 
 This split keeps USB reads, binary packet rebuilding, calibration processing, UI painting, and file output from blocking each other unnecessarily.
 
@@ -138,22 +138,24 @@ The side panel includes:
 
 - `Connection`: COM-port refresh, connect/disconnect, and live-display pause/resume
 - `Tools`: buttons for the calibration manager and display/layout manager
-- `Session And Commands`: raw USB CDC command entry, CSV export, and session reset
-- `Frame Data`: frame, layout, edge-sample, refresh-rate, session, and cursor readouts
+- `Integration and Recording`: integration time, recording start and stop, and session export
+- `Frame Data`: frame, layout, edge-sample, refresh-rate, and session readouts
 - `Performance`: optional timing and throughput report
 - `Diagnostics`: recent log messages
 
 The main display can show:
 
-- `Live Spectrum`: a processed line plot of the current effective pixels
+- `Live Spectrum`: a processed or raw ADC line plot with numbered markers, reference differences, and peak and valley searches
 - `Rolling Spectrogram`: a heatmap built from recent compact frame rows
 - `Calibration Manager`: the full calibration workflow
-- `Display & Layout`: graph-mode, spectrogram-window, side-panel, and frame-data visibility settings
+- `Display & Layout`: graph-mode, spectrogram-window, cursor, side-panel, and frame-data visibility settings
+
+Hover over supported connection, recording, calibration, and display controls for help. In the line plot, use **Add Marker** and click a point or run a search to place it. Use **More...** to set a reference marker or clear markers.
 
 ## Calibration Pipeline
 
 The live graph is no longer a raw-only ADC plot.
-`SpectrumBuilder` stores raw ADC counts for export and debugging, but the visible line spectrum uses the current processed display signal when available.
+`SpectrumBuilder` retains raw ADC counts for bias capture and diagnostics. The visible line spectrum uses the current processed display signal when available.
 
 The processing path is:
 
@@ -168,30 +170,22 @@ The processing path is:
 9. Normalize the display either by absolute saturation reference or per-frame auto peak.
 10. Compress a stable 0-to-1 row for the rolling spectrogram.
 
-CSV export writes both raw and derived columns:
+## HDF5 Capture and Session Export
 
-- `raw_adc_count`
-- `processed_adc_count`
-- `frame_dark_reference_count`
-- `wavelength_nm`
-- `volts`
-- `processed_intensity`
+1. In **Integration and Recording**, click **Start Binary Recording**. The app writes full-rate measurements to `exports/spectrometer_capture_*.h5` using the last saved calibration.
+2. Use **Save Calibration** to apply a change to subsequent recorded frames. Calibration previews affect the live display.
+3. Click **Stop Binary Recording**, then **Export Session**. Choose a folder and filename in the Windows Save As dialog. The status bar shows the export percentage and reports the ZIP path when it is ready.
 
-## Dense Binary Capture
+The ZIP contains two entries.
 
-The side-panel `Session And Commands` card includes:
+- `frames.csv` contains one row per sample with `frame_index`, `frame_id`, `timestamp_ns`, `sample_index`, `raw_adc_count`, `processed_adc_count`, `volts`, and `processed_intensity`.
+- `calibration.json` contains detector and ADC settings, wavelength mapping and correction vectors for each revision, and separate `calibration_ranges` and `timing_ranges` lists. Join both lists to `frames.csv` by the zero-based `frame_index`. Each `start_frame_index` is inclusive and each `end_frame_index` is exclusive. Missing timing values are JSON `null`.
 
-- `Start Binary Recording`
-- `Stop Binary Recording`
-- `Convert Last Binary Recording To CSV`
-
-Binary recordings are written to `exports/spectrometer_capture_*.h5`. These HDF5 files are the full-rate capture artifact; the live graph and rolling session buffer are throttled display views.
-
-The same tools are available from the command line when running inside `PythonGUI`:
+The CLI can inspect a recording, extract the same frame-only CSV, or benchmark capture. Run it from `PythonGUI`.
 
 ```bat
-python -m backend.storage.binary_capture_cli validate exports\spectrometer_capture_YYYYMMDD_HHMMSS.h5
-python -m backend.storage.binary_capture_cli convert exports\spectrometer_capture_YYYYMMDD_HHMMSS.h5
+python -m backend.storage.binary_capture_cli validate exports\capture.h5
+python -m backend.storage.binary_capture_cli convert exports\capture.h5 --csv exports\frames.csv
 python -m backend.storage.binary_capture_cli benchmark --frames 1250 --sample-count 3694
 ```
 
@@ -201,22 +195,20 @@ The calibration manager is opened from `Tools` and gives the calibration workflo
 
 It currently supports:
 
-- processing toggles for dark subtraction, intensity correction, and QE/response correction
-- display normalization mode: `Absolute Saturation` or `Auto Range`
-- direct wavelength polynomial editing
-- wavelength fit order control
-- master bias `B_p` capture from recent covered-sensor frames
-- master bias and master-dark vector editing
+- live correction toggles in the Bias And Dark Terms, Flat-Field / PRNU, and QE / Response Curve cards
+- guided master bias `B_p` capture from recent covered-sensor frames, with a spectrum and read-only averaged counts for review
+- master bias vector editing
 - manual pixel-to-wavelength mapping point entry
-- guided laser-diode mapping by clicking a peak on the plot and capturing that pixel
-- coefficient fitting from saved mapping points
+- guided laser-diode mapping in a dialog where you add or remove wavelength rows before capture. Each capture step shows the target wavelength, live spectrum, and progress. Click a peak or use **Prev Peak** and **Next Peak**, then use the arrow keys to fine-tune the pixel. After the last peak, choose **Complete** to fit and save the wavelength calibration, or **Cancel Calibration** to discard the captured references.
+- fit order, active fit status, and **Fit Wavelength Map** in Wavelength Mapping
 - flat-field / PRNU correction factor entry
 - QE / response point entry and normalization wavelength selection
-- previewing calibration without saving
-- saving calibration and syncing user config
 
-The x-axis stays in pixel mode until saved wavelength mapping points and non-default coefficients exist.
-This prevents stale coefficient text from making an uncalibrated graph look wavelength-calibrated.
+The guided bias, saturation, and wavelength routines use the same step header, preview area, progress indicator, and review controls. **Complete** saves the result for that routine and applies it to the live display. **Cancel Calibration** discards the staged capture.
+
+The **Save Calibration** button in the manager header validates and applies manual correction edits, writes the calibration profile, and syncs user settings. Correction toggles and manual wavelength fits update the live display immediately.
+
+Fit new or changed reference points before saving them. A successful fit switches the x-axis to wavelength when the map is active. Resetting the mapping or saving an empty point table restores pixel mode.
 
 ## Display And Layout Manager
 
@@ -225,6 +217,7 @@ The display/layout manager is opened from `Tools`.
 It currently controls:
 
 - line spectrum vs rolling spectrogram graph mode
+- **Spectrum scaling** in **Live Graph** with `Absolute Saturation` and `Auto Range`
 - spectrogram time window: `2 s`, `5 s`, `10 s`, or `20 s`
 - visibility of the Session And Commands card
 - visibility of the Diagnostics card
@@ -233,6 +226,7 @@ It currently controls:
 
 Some display settings are stored in memory immediately and are written to `configs/user.json` when user settings are saved.
 If a field is absent from `configs/default_user.json`, the Pydantic model default in `backend/models/config.py` is used.
+Spectrum scaling updates immediately and persists through **Save Calibration**. Each binary recording uses the scaling selected at its start.
 
 ## Performance Diagnostics
 
@@ -293,7 +287,7 @@ User config is structured as:
 - `ui.show_frame_data_edge`
 - `ui.show_frame_data_refresh`
 - `ui.show_frame_data_session`
-- `ui.show_frame_data_cursor`
+- `ui.cursor` for marker appearance, reference readouts, and search sensitivity
 
 Calibration config is structured as:
 
@@ -319,11 +313,13 @@ The app writes logs to:
 logs/vis_nir_spec.log
 ```
 
-CSV exports are written under:
+HDF5 recordings are written under:
 
 ```text
 exports/
 ```
+
+The Save As dialog sets the location of each session ZIP.
 
 The log file is useful when:
 
@@ -353,6 +349,37 @@ If you want to understand the project from top to bottom, this is a good reading
 14. `CODE_TOUR.md`
 
 ## Detailed Documentation
+
+The production firmware now sends CCD1 v3 packets with CRC32 and timing profile
+`0x00010001`. The desktop decoder also reads legacy v1/v2 frames, whose timing
+profile remains unknown. Stored bias must match the frame profile; stored dark
+offsets must match both profile and integration time. Older calibration arrays
+remain saved but are bypassed for the corrected production profile.
+
+In **Display Manager**, choose **Raw ADC - full frame** to inspect all 3694
+samples on a 0–4095 scale. **Diagnostics** reports the nominal shielded-reference
+median, its difference from the active median, and calibration compatibility.
+In **Calibration Manager**, start **Saturation Calibration** and wait for
+1 second integration to be confirmed. Shine a steady white light, such as a
+phone flashlight, through the SMA port and select **Confirm White Light**.
+The app checks that every active pixel is illuminated and that their raw ADC
+counts span at most 5% of full scale. Once the waveform passes, the app collects
+eight frames by default and restores the previous integration time. The dialog
+shows a live plot of the active pixels, read-only raw counts, and capture
+progress. After the exposure restore finishes, review the averaged counts and
+choose **Complete** to save the reference or **Cancel Calibration** to discard
+it. Use **Save Calibration** in the manager to persist changes to the two
+saturation switches.
+
+**Use calibrated limit for plot scaling** maps the measured limit at each
+active pixel to 1.0 in **Absolute Saturation** mode. **Show potential saturation
+warning** opens the banner when three adjacent active pixels reach at least
+87.5% of their calibrated signal spans. The banner also reports ADC clipping.
+**Diagnostics** reports shifts in the shielded reference.
+Capture a fresh covered baseline after the timing change. The nominal 32/3648/14
+mapping remains unchanged until sensor-pin timing and optical alignment are verified.
+
+HDF5 recordings retain the per-frame timing profile and original ADC counts. Session ZIP files carry the counts in `frames.csv` and the associated timing ranges in `calibration.json`.
 
 For the file-by-file walkthrough that explains every module and the main runtime paths, read:
 

@@ -59,9 +59,14 @@ UUID: :ref:`A1F94639-3E18-4FCD-A9AB-7DFB20EB9929 <uuid-a1f94639-3e18-4fcd-a9ab-7
      - Status
    * - EMB-1
      - CCD timing
-     - Measure fM, SH, and ICG with an oscilloscope. Pass when fM is
-       2 MHz ±0.1%, the ICG period is 8 ms with a 7.388 ms pulse width, and
-       SH has a 10 µs set time with its pulse aligned to the ICG off time.
+     - At the 100 µs startup integration setting, measure fM, SH, and ICG
+       at the detector with an oscilloscope. Pass when fM is 2 MHz ±0.1%
+       with a 50% duty cycle, the frame period is 8 ms, and ICG is low
+       for 8 µs at the start of the frame. The first SH pulse rises
+       0.5 µs after ICG falls and stays high for 6 µs. Record the probe
+       points and polarity. The 7.388 ms interval is the detector
+       readout. See :doc:`CCD timing requirements
+       <../embedded/timing_and_data_acquisition/ccd_timing_and_waveform_generation>`.
      - Planned
    * - EMB-2
      - USB stream integrity
@@ -77,10 +82,11 @@ UUID: :ref:`A1F94639-3E18-4FCD-A9AB-7DFB20EB9929 <uuid-a1f94639-3e18-4fcd-a9ab-7
        (:ref:`C4 <uuid-22971c51-a176-427e-9509-c552d1b1c6c3>`).
      - Planned
    * - SW-1
-     - CSV export
-     - Export a capture. Pass when the file holds raw ADC counts and
-       wavelengths in matching rows and re-plotting it reproduces the
-       displayed spectrum.
+     - Session ZIP export
+     - Export a completed recording. Pass when ``frames.csv`` preserves
+       raw and processed counts, volts, and processed intensity, and
+       the wavelength map in ``calibration.json`` maps the effective
+       samples to the wavelengths needed to replot the spectrum.
      - Planned
    * - CAL-1
      - Source coupling
@@ -187,13 +193,15 @@ UUID: :ref:`8607F505-397A-4508-A711-A4AD54E46EDB <uuid-8607f505-397a-4508-a711-a
    * - CMP-1
      - Peak wavelength
      - Measure the secondary LED on both instruments under identical
-       conditions and export both spectra to CSV. Pass when the prototype's
+       conditions. Export the reference CSV and prototype session ZIP. Use
+       the :doc:`Comparison Procedure <procedure>` to reconstruct the
+       prototype wavelength axis. Pass when the prototype's
        peak wavelength is within 2 nm of the reference's
        (:ref:`C2 <uuid-22f91c7c-d310-486a-ac24-bdc8be1b11ac>`).
      - Planned
    * - CMP-2
      - Peak width
-     - From the same CSVs, compute the LED's FWHM on each instrument and
+     - From the same exported data, compute the LED's FWHM on each instrument and
        report the difference. Limit ``Not In Docs``.
      - Planned
    * - CMP-3
@@ -307,7 +315,8 @@ UUID: :ref:`DB0F211B-A3F8-4E81-9730-184A20337855 <uuid-db0f211b-a3f8-4e81-9730-1
      - Operator workflow
      - A team member who did not write the software connects the device,
        starts acquisition, adjusts integration time, applies the stored
-       calibration, and exports a CSV by following the operation manual.
+       calibration, stops recording, and exports the session ZIP by
+       following the operation manual.
        Pass with no code or hardware changes.
      - Planned
 
@@ -318,6 +327,22 @@ spectrum and completes the routine workflow without code or hardware changes.
 **Rationale:** The client will use the instrument through the application,
 not through exported data, so the demonstration must show that a user can
 reach a correct identification on their own.
+
+.. _uuid-1ff82c60-67f4-47ec-89ae-3ca8d30a8271:
+
+SW-4 - Session Archive Traceability
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Requirement:** The Host PC Verification system shall verify that an
+exported session ZIP preserves the HDF5 measurements and joins each frame
+to the calibration and device timing used during capture.
+
+**Rationale:** Changes during acquisition can affect processed measurements.
+A frame-level join lets reviewers attribute each result to its capture state.
+
+**Status:** Planned. **Method:** Record frames across a calibration preview,
+a calibration save, and a device-confirmed timing change. Compare the ZIP
+measurements and both range lists with the HDF5 recording.
 
 .. _uuid-83440b99-224e-4cc3-a033-08a9328a5682:
 
